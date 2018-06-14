@@ -118,3 +118,14 @@ and 0x0010000c is the first instruction of the kernel. To check what is this ins
 ```
 so `movw   $0x1234,0x472` is the first instruction of the kernel.
 
+_How does the boot loader decide how many sectors it must read in order to fetch the entire kernel from disk? Where does it find this information?_
+The kernel itself is an ELF file, and the bootloader "parses" the ELF format to see how many sectors there are.
+```
+        ph = (struct Proghdr *) ((uint8_t *) ELFHDR + ELFHDR->e_phoff); // get the address of the first header
+        eph = ph + ELFHDR->e_phnum; // get the address of the end of the last header
+        // now iterate through the headers and load the kernel.
+        for (; ph < eph; ph++)
+                // p_pa is the load address of this segment (as well
+                // as the physical address)
+                readseg(ph->p_pa, ph->p_memsz, ph->p_offset);
+```
