@@ -97,12 +97,24 @@ The GDT contains the null segment, executable and readable code segment, and wri
   movw    %ax, %ds                # -> DS: Data Segment
   ...
   ```
+  
+  
  _What is the last instruction of the boot loader executed, and what is the first instruction of the kernel it just loaded? Where is the first instruction of the kernel?_  
  last executed is:
  ```
          ((void (*)(void)) (ELFHDR->e_entry))();
     7d61:       ff 15 18 00 01 00       call   *0x10018
  ```
-notice that ELFHDR has been copied starting from address 0x10000, and 0x10018 is an offset of 24 bytes from the beginning of where the struct is in memory. If we look at the definition of `struct Elf`, we see that `e_entry` is at offset (32+8*12+16+16+32)/8 = 24.   
-and we see that the first instruction of the kernel is at 0x10018.
+notice that ELFHDR has been copied starting from address 0x10000, and 0x10018 is an offset of 24 bytes from the beginning of where this struct is in memory. If we look at the definition of `struct Elf`, we see that `e_entry` is at offset (32+8*12+16+16+32)/8 = 24.   
+so if we use gdb to see what's stored in there, we see the following:
+```
+(gdb) x/1w 0x10018
+0x10018:	0x0010000c
+```
+and 0x0010000c is the first instruction of the kernel. To check what is this instruction, we can do:
+```
+(gdb) x/1i 0x0010000c
+=> 0x10000c:	movw   $0x1234,0x472
+```
+so `movw   $0x1234,0x472` is the first instruction of the kernel.
 
