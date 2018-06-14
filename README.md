@@ -4,7 +4,7 @@ guide with useful gdb commands: https://pdos.csail.mit.edu/6.828/2017/labguide.h
 the x command: http://visualgdb.com/gdbreference/commands/x  
 solutions link: https://github.com/Clann24/jos  
 
-## Booting notes:
+## booting
 MIT's memory space map
 ```
 +------------------+  <- 0xFFFFFFFF (4GB)
@@ -49,11 +49,12 @@ our bootloader resides in these 512 bytes, and notice that this is in the `Low M
 ## inside the bootloader
 if we look at `obj/boot/boot.asm` we see the disassembly of the actual bootloader. The source code for the bootloader itself is in `boot/` directory.  
 To step through the assembly code in gdb: `b *0x7c00` (see the visualgdb site), then `c` to hit the breakpoint. then use `si` to step through the instructions.
-Notice if we use:
+Notice if we use :
 ```
 (gdb) x/2x 0x7c00
 0x7c00:	0xc031fcfa	0xc08ed88e
 ```
+(print 2 words starting from address 0x7c00)
 this corresponds to the disassembled:
 ```
   .code16                     # Assemble for 16-bit mode
@@ -71,3 +72,30 @@ this corresponds to the disassembled:
     7c06:       8e c0                   mov    %eax,%es
 ``` 
 notice the order.
+but if we print bytes individually, we get the right order:
+```
+(gdb) x/8b 0x7c00
+0x7c00:	0xfa	0xfc	0x31	0xc0	0x8e	0xd8	0x8e	0xc0
+```
+## Exercise 3:
+_At what point does the processor start executing 32-bit code? What exactly causes the switch from 16- to 32-bit mode?_
+* First, the following loads the GDT:  
+`lgdt    gdtdesc`  
+where gdtdesc is a region in memory that stores the content of what the GDT should load. the format is [size of gdt][address of gdt].
+The GDT contains the null segment, executable and readable code segment, and writable data segments. both segments span from address 0 to address 4G.
+* set the protected mode enable flag
+```
+  movl    %cr0, %eax
+  orl     $CR0_PE_ON, %eax
+  movl    %eax, %cr0
+ ```
+ * perform jump to load CS properly  
+ `  ljmp    $PROT_MODE_CSEG, $protcseg`
+ _What is the last instruction of the boot loader executed, and what is the first instruction of the kernel it just loaded? Where is the first instruction of the kernel?_  
+ last executed is:
+ ```
+         ((void (*)(void)) (ELFHDR->e_entry))();
+    7d61:       ff 15 18 00 01 00       call   *0x10018
+ ```
+and we see that the first instruction of the kernel is at 0x10018.
+
