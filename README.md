@@ -89,13 +89,20 @@ The GDT contains the null segment, executable and readable code segment, and wri
   orl     $CR0_PE_ON, %eax
   movl    %eax, %cr0
  ```
- * perform jump to load CS properly  
- `  ljmp    $PROT_MODE_CSEG, $protcseg`
+ * perform jump to load CS segment register properly  
+ `  ljmp    $PROT_MODE_CSEG, $protcseg`  
+ notice that the other segment registers are loaded the "regular" way:
+ ```
+  movw    $PROT_MODE_DSEG, %ax    # Our data segment selector
+  movw    %ax, %ds                # -> DS: Data Segment
+  ...
+  ```
  _What is the last instruction of the boot loader executed, and what is the first instruction of the kernel it just loaded? Where is the first instruction of the kernel?_  
  last executed is:
  ```
          ((void (*)(void)) (ELFHDR->e_entry))();
     7d61:       ff 15 18 00 01 00       call   *0x10018
  ```
+notice that ELFHDR has been copied starting from address 0x10000, and 0x10018 is an offset of 24 bytes from the beginning of where the struct is in memory. If we look at the definition of `struct Elf`, we see that `e_entry` is at offset (32+8*12+16+16+32)/8 = 24.   
 and we see that the first instruction of the kernel is at 0x10018.
 
