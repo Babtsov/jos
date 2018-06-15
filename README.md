@@ -172,3 +172,27 @@ Idx Name          Size      VMA       LMA       File off  Algn
   6 .comment      0000002b  00000000  00000000  00013300  2**0
                   CONTENTS, READONLY
 ```
+## Exercise 6
+__Examine the 8 words of memory at 0x00100000 at the point the BIOS enters the boot loader, and then again at the point the boot loader enters the kernel. Why are they different? What is there at the second breakpoint?__  
+at the point when the BIOS enters the bootloader:
+```
+(gdb) x/8w 0x00100000
+0x100000:	0x00000000	0x00000000	0x00000000	0x00000000
+0x100010:	0x00000000	0x00000000	0x00000000	0x00000000
+```
+at the point when bootloader enters the kernel:
+```
+(gdb) x/8w 0x00100000
+0x100000:	0x1badb002	0x00000000	0xe4524ffe	0x7205c766
+0x100010:	0x34000004	0x0000b812	0x220f0011	0xc0200fd8
+(gdb) x/8i 0x00100000
+   0x100000:	add    0x1bad(%eax),%dh
+   0x100006:	add    %al,(%eax)
+   0x100008:	decb   0x52(%edi)
+   0x10000b:	in     $0x66,%al
+   0x10000d:	movl   $0xb81234,0x472
+   0x100017:	add    %dl,(%ecx)
+   0x100019:	add    %cl,(%edi)
+   0x10001b:	and    %al,%bl
+```
+comparing this to the `boot/kernel.asm`, We see that this is exactly the beginning of the code segment of the kernel. This makes sense because the bootloader loaded the kernel's .text section starting at the LMA (load address) `00100000` (see the kernel's ELF headers).
