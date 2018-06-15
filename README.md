@@ -127,8 +127,8 @@ The kernel itself is an ELF file, and the bootloader "parses" the ELF format to 
                 // as the physical address)
                 readseg(ph->p_pa, ph->p_memsz, ph->p_offset);
 ```
-## Kernel
-As mentioned, the kernel is an elf file. We can get a peek into the code (instructions) of the kernel using the following:
+## ELF and binary files
+As mentioned, the kernel is an ELF file. We can get a peek into the code (instructions) of the kernel using the following:
 ```
 vagrant@vagrant-ubuntu-trusty-32:~/jos$ objdump -d obj/kern/kernel | head -n 17
 
@@ -172,6 +172,14 @@ Idx Name          Size      VMA       LMA       File off  Algn
   6 .comment      0000002b  00000000  00000000  00013300  2**0
                   CONTENTS, READONLY
 ```
+## Exercise 5
+_Trace through the first few instructions of the boot loader again and identify the first instruction that would "break" or otherwise do the wrong thing if you were to get the boot loader's link address wrong. Then change the link address in boot/Makefrag to something wrong, run make clean, recompile the lab with make, and trace into the boot loader again to see what happens. Don't forget to change the link address back and make clean again afterward!_  
+
+if we trace the code, we see that  
+`ljmp    $PROT_MODE_CSEG, $protcseg`
+was the first instruction that broke.  
+My hypothesis was that `jnz     seta20.1` would have broken first because it's the first jump instruction that seems to contain an address. However, it doesn't seem to be the case because jnz uses a relative address to jump, so the address in the instruction was actually correct (because it was just an offset as opposed to an absolute address). `ljmp` uses absolute address, so it makes sense that it was the one that broke. Notice that looking at `boot/boot.asm` doesn't reveal this.
+
 ## Exercise 6
 __Examine the 8 words of memory at 0x00100000 at the point the BIOS enters the boot loader, and then again at the point the boot loader enters the kernel. Why are they different? What is there at the second breakpoint?__  
 at the point when the BIOS enters the bootloader:
