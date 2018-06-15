@@ -194,10 +194,11 @@ _line 4:_  `c = c + 1;` increments c so now c points to `a[1]` instead of pointi
 _line 5:_ let's look at the memory in terms of binary form: since `c[0]` is `a[1]`:  
 `c[0]` = `a[1]` -> 00 00 01 90  
 `c[1]` = `a[2]` -> 00 00 01 2D  
-`(char *) c + 1)` means take the second byte of `c[0]` which will be 0x01. (the first byte of `c[0]` is 0x90 because x86 is little endian system, so less significant bytes come first). Now we'll cast it into an int, which is 4 bytes, thus grabbing the 2D of the next element, thus we have c pointing to 2D 00 00 01. we replace this with 500, so it becomes `00 00 01 F4` so our address is now:
-`a[1]` -> 00 01 F4 90 -> 128144
-`a[2]` -> 00 00 01 00 ->  256
-
+`((char *) c + 1)` means take the second byte of `c[0]` which will be 0x01. (the first byte of `c[0]` is 0x90 because the x86 architecture is little endian, so the less significant bytes come first). Now we'll cast it into an int, which is 4 bytes, thus grabbing the 2D of the next element, thus we have c pointing to `2D 00 00 01`. we replace this with 500, so it becomes `00 00 01 F4` so our address is now:
+`a[1]` -> 00 01 F4 90 -> 128144  
+`a[2]` -> 00 00 01 00 ->  256  
+_line 6:_  `b = (int *) a + 1;` means b points to `a[1]`, or in other words, b is 4 bytes higher than a.  
+we know a is pointing to address `0x7ffeef1949d0` so add 4 to it and we get `0x7ffeef1949d4` for b. Now `c = (int *) ((char *) a + 1);` means c points to 1 byte higher than a hence its address is `0x7ffeef1949d1`. All this works because the width of `char` is always 1 (by the C standard, as far as I know), and `int` is 4 bytes in the 32bit x86 architecture.  
 
 ## ELF and binary files
 As mentioned, the kernel is an ELF file. We can get a peek into the code (instructions) of the kernel using the following:
