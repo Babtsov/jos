@@ -78,7 +78,7 @@ but if we print bytes individually, we get the right order:
 0x7c00:	0xfa	0xfc	0x31	0xc0	0x8e	0xd8	0x8e	0xc0
 ```
 ## Exercise 3:
-###_At what point does the processor start executing 32-bit code? What exactly causes the switch from 16- to 32-bit mode?_
+### _At what point does the processor start executing 32-bit code? What exactly causes the switch from 16- to 32-bit mode?_
 * First, the following loads the GDT:  
 `lgdt    gdtdesc`  
 where gdtdesc is a region in memory that stores the content of what the GDT should load. the format is [size of gdt][address of gdt].
@@ -127,6 +127,73 @@ The kernel itself is an ELF file, and the bootloader "parses" the ELF format to 
                 // as the physical address)
                 readseg(ph->p_pa, ph->p_memsz, ph->p_offset);
 ```
+## Exercise 4:
+Execute the following code:
+```C
+#include <stdio.h>
+#include <stdlib.h>
+
+void
+f(void)
+{
+    int a[4];
+    int *b = malloc(16);
+    int *c;
+    int i;
+
+    printf("1: a = %p, b = %p, c = %p\n", a, b, c);
+
+    c = a;
+    for (i = 0; i < 4; i++)
+       a[i] = 100 + i;
+    c[0] = 200;
+    printf("2: a[0] = %d, a[1] = %d, a[2] = %d, a[3] = %d\n", a[0], a[1], a[2], a[3]);
+
+    c[1] = 300;
+    *(c + 2) = 301;
+    3[c] = 302;
+    printf("3: a[0] = %d, a[1] = %d, a[2] = %d, a[3] = %d\n", a[0], a[1], a[2], a[3]);
+
+    c = c + 1;
+    *c = 400;
+    printf("4: a[0] = %d, a[1] = %d, a[2] = %d, a[3] = %d\n", a[0], a[1], a[2], a[3]);
+
+    c = (int *) ((char *) c + 1);
+    *c = 500;
+    printf("5: a[0] = %d, a[1] = %d, a[2] = %d, a[3] = %d\n", a[0], a[1], a[2], a[3]);
+
+    b = (int *) a + 1;
+    c = (int *) ((char *) a + 1);
+    printf("6: a = %p, b = %p, c = %p\n", a, b, c);
+}
+
+int
+main(int ac, char **av)
+{
+    f();
+    return 0;
+}
+
+```
+_where do the pointer addresses in printed lines 1 and 6 come from? how all the values in printed lines 2 through 4 get there, and why the values printed in line 5 are seemingly corrupted?_
+
+executing the above we get the following example run:
+```
+1: a = 0x7ffeef1949d0, b = 0x2137010, c = 0x4006fd
+2: a[0] = 200, a[1] = 101, a[2] = 102, a[3] = 103
+3: a[0] = 200, a[1] = 300, a[2] = 301, a[3] = 302
+4: a[0] = 200, a[1] = 400, a[2] = 301, a[3] = 302
+5: a[0] = 200, a[1] = 128144, a[2] = 256, a[3] = 302
+6: a = 0x7ffeef1949d0, b = 0x7ffeef1949d4, c = 0x7ffeef1949d1
+```
+Notice that addresses will get different values on different invocations of this program, due to address randomization. (See [this](https://learnlinuxconcepts.blogspot.com/2014/03/memory-layout-of-userspace-c-program.html) for a nice diagram).  
+_line 1:_ a stores the address of the first element of an array that is stored in the stack frame of the function (hence the high memory). b points to data stored in the heap, and c points to random junk. the address that c points to just happens to be some junk left over in that memory region.  
+_line 2:_ array is initialized with values (100...103) and first element is changed to 200.  
+_line 3:_ `c[1] = 300` sets the second element to 300. `*(c + 2) = 301;` is the same as `c[2]=301` (so it sets the 3rd element to 301). and `3[c] = 302` is the same as `c[3] = 302` because 3[c] -> `*(3+c)` -> `*(c+3)` -> `c[3]`  so 4th element is 302.  
+_line 4:_  `c = c + 1;` increments c so now c points to `a[1]` instead of pointing to `a[0]` so, `*c = 400;` is the same as `c[0]=400` which is the same as `a[1] = 400`. so that's the only element that changed.  
+_line 5:_
+
+
 ## ELF and binary files
 As mentioned, the kernel is an ELF file. We can get a peek into the code (instructions) of the kernel using the following:
 ```
