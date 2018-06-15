@@ -189,9 +189,14 @@ executing the above we get the following example run:
 Notice that addresses will get different values on different invocations of this program, due to address randomization. (See [this](https://learnlinuxconcepts.blogspot.com/2014/03/memory-layout-of-userspace-c-program.html) for a nice diagram).  
 _line 1:_ a stores the address of the first element of an array that is stored in the stack frame of the function (hence the high memory). b points to data stored in the heap, and c points to random junk. the address that c points to just happens to be some junk left over in that memory region.  
 _line 2:_ array is initialized with values (100...103) and first element is changed to 200.  
-_line 3:_ `c[1] = 300` sets the second element to 300. `*(c + 2) = 301;` is the same as `c[2]=301` (so it sets the 3rd element to 301). and `3[c] = 302` is the same as `c[3] = 302` because 3[c] -> `*(3+c)` -> `*(c+3)` -> `c[3]`  so 4th element is 302.  
+_line 3:_ `c[1] = 300` sets the second element to 300. `*(c + 2) = 301;` is the same as `c[2]=301` (so it sets the 3rd element to 301). and `3[c] = 302` is the same as `c[3] = 302` because `3[c]` -> `*(3+c)` -> `*(c+3)` -> `c[3]`  so 4th element is 302.  
 _line 4:_  `c = c + 1;` increments c so now c points to `a[1]` instead of pointing to `a[0]` so, `*c = 400;` is the same as `c[0]=400` which is the same as `a[1] = 400`. so that's the only element that changed.  
-_line 5:_
+_line 5:_ let's look at the memory in terms of binary form: since `c[0]` is `a[1]`:  
+`c[0]` = `a[1]` -> 00 00 01 90  
+`c[1]` = `a[2]` -> 00 00 01 2D  
+`(char *) c + 1)` means take the second byte of `c[0]` which will be 0x01. (the first byte of `c[0]` is 0x90 because x86 is little endian system, so less significant bytes come first). Now we'll cast it into an int, which is 4 bytes, thus grabbing the 2D of the next element, thus we have c pointing to 2D 00 00 01. we replace this with 500, so it becomes `00 00 01 F4` so our address is now:
+`a[1]` -> 00 01 F4 90 -> 128144
+`a[2]` -> 00 00 01 00 ->  256
 
 
 ## ELF and binary files
