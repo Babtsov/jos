@@ -2,6 +2,7 @@
 lab link: https://pdos.csail.mit.edu/6.828/2017/labs/lab1/  
 guide with useful gdb commands: https://pdos.csail.mit.edu/6.828/2017/labguide.html  
 the x command: http://visualgdb.com/gdbreference/commands/x  
+x86 registers: https://wiki.osdev.org/CPU_Registers_x86  
 solutions link: https://github.com/Clann24/jos  
 
 ## booting
@@ -277,3 +278,57 @@ at the point when bootloader enters the kernel:
    0x10001b:	and    %al,%bl
 ```
 comparing this to the `boot/kernel.asm`, We see that this is exactly the beginning of the code segment of the kernel. This makes sense because the bootloader loaded the kernel's .text section starting at the LMA (load address) `00100000` (see the kernel's ELF headers).
+
+## Exercise 7
+_Use QEMU and GDB to trace into the JOS kernel and stop at the movl %eax, %cr0. Examine memory at 0x00100000 and at 0xf0100000. Now, single step over that instruction using the stepi GDB command. Again, examine memory at 0x00100000 and at 0xf0100000. Make sure you understand what just happened.  
+What is the first instruction after the new mapping is established that would fail to work properly if the mapping weren't in place? Comment out the movl %eax, %cr0 in kern/entry.S, trace into it, and see if you were right._  
+
+Before and after the stepping:
+```
+(gdb) b *0x100025
+Breakpoint 1 at 0x100025
+(gdb) c
+Continuing.
+The target architecture is assumed to be i386
+=> 0x100025:	mov    %eax,%cr0
+
+Breakpoint 1, 0x00100025 in ?? ()
+(gdb) x/i $pc
+=> 0x100025:	mov    %eax,%cr0
+(gdb) x/10w 0x00100000
+0x100000:	0x1badb002	0x00000000	0xe4524ffe	0x7205c766
+0x100010:	0x34000004	0x0000b812	0x220f0011	0xc0200fd8
+0x100020:	0x0100010d	0xc0220f80
+(gdb) x/10w 0xf0100000
+0xf0100000 <_start+4026531828>:	0x00000000	0x00000000	0x00000000	0x00000000
+0xf0100010 <entry+4>:	0x00000000	0x00000000	0x00000000	0x00000000
+0xf0100020 <entry+20>:	0x00000000	0x00000000
+(gdb) si
+=> 0x100028:	mov    $0xf010002f,%eax
+0x00100028 in ?? ()
+(gdb) x/10w 0x00100000
+0x100000:	0x1badb002	0x00000000	0xe4524ffe	0x7205c766
+0x100010:	0x34000004	0x0000b812	0x220f0011	0xc0200fd8
+0x100020:	0x0100010d	0xc0220f80
+(gdb) x/10w 0xf0100000
+0xf0100000 <_start+4026531828>:	0x1badb002	0x00000000	0xe4524ffe	0x7205c766
+0xf0100010 <entry+4>:	0x34000004	0x0000b812	0x220f0011	0xc0200fd8
+0xf0100020 <entry+20>:	0x0100010d	0xc0220f80
+```
+As we can see, after that instruction, the 0xf0100000 addresses now contain the kernel .text section. to confirm we can do:
+```
+(gdb) x/10i 0xf0100000
+   0xf0100000 <_start+4026531828>:	add    0x1bad(%eax),%dh
+   0xf0100006 <_start+4026531834>:	add    %al,(%eax)
+   0xf0100008 <_start+4026531836>:	decb   0x52(%edi)
+   0xf010000b <_start+4026531839>:	in     $0x66,%al
+   0xf010000d <entry+1>:	movl   $0xb81234,0x472
+   0xf0100017 <entry+11>:	add    %dl,(%ecx)
+   0xf0100019 <entry+13>:	add    %cl,(%edi)
+   0xf010001b <entry+15>:	and    %al,%bl
+   0xf010001d <entry+17>:	mov    %cr0,%eax
+   0xf0100020 <entry+20>:	or     $0x80010001,%eax
+```
+and those look like the instructions from the kernel's .text section.   
+
+If we comment out the `movl %eax, %cr0` line, paging won't be enabled, and the first instruction fails is `movl	$0x0,%ebp`. the reason why it fails is that the prior instruction made us jump to address `0xf010002c`. Because paging is not enabled, this address is interpeted as a physical address, and since there is no RAM inside of it, qemu crashes. Indeed if we look at the qemu output, we see: `fatal: Trying to execute code outside RAM or ROM at 0xf010002c`
