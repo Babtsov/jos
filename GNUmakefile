@@ -150,7 +150,7 @@ QEMUOPTS += $(QEMUEXTRA)
 gdb:
 	gdb -n -x .gdbinit
 
-pre-qemu: .gdbinit
+pre-qemu: .gdbinit tags
 
 qemu: $(IMAGES) pre-qemu
 	$(QEMU) $(QEMUOPTS)
@@ -296,7 +296,8 @@ myapi.key:
 
 #handin-prep:
 #	@./handin-prep
-
+tags:
+	find . -name "*.[chS]" -print | xargs etags
 
 # This magic automatically generates makefile dependencies
 # for header files included from C source files we compile,
