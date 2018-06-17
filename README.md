@@ -332,3 +332,29 @@ As we can see, after that instruction, the 0xf0100000 addresses now contain the 
 and those look like the instructions from the kernel's .text section.   
 
 If we comment out the `movl %eax, %cr0` line, paging won't be enabled, and the first instruction fails is `movl	$0x0,%ebp`. the reason why it fails is that the prior instruction made us jump to address `0xf010002c`. Because paging is not enabled, this address is interpeted as a physical address, and since there is no RAM inside of it, qemu crashes. Indeed if we look at the qemu output, we see: `fatal: Trying to execute code outside RAM or ROM at 0xf010002c`
+## Exercise 8
+_We have omitted a small fragment of code - the code necessary to print octal numbers using patterns of the form "%o". Find and fill in this code fragment._   
+*see src for answer*
+
+## Be able to answer the following questions:  
+
+_Explain the interface between printf.c and console.c. Specifically, what function does console.c export? How is this function used by printf.c?_  
+
+console.c exports `cputchar(int c)` which is a low level routine puts a character in the serial port, the parallel port, and in the CGA buffer, which appears on the screen. printf.c has a function `putch(int ch, int* cnt)` that uses this cputchar function exposed by console.c. It is worth mentioning that the useful function `cprintf` actually passes `putch` to vprintfmt which accepts a "generic function that prints a character".  
+
+
+Explain the following from console.c:_
+```
+      if (crt_pos >= CRT_SIZE) {
+              int i;
+              memmove(crt_buf, crt_buf + CRT_COLS, (CRT_SIZE - CRT_COLS) * sizeof(uint16_t));
+              for (i = CRT_SIZE - CRT_COLS; i < CRT_SIZE; i++)
+                      crt_buf[i] = 0x0700 | ' ';
+              crt_pos -= CRT_COLS;
+      }
+```
+looks like the crt is is a matrix of 25 rows and 80 columns, so CRT_SIZE is 25\*80=2000.  
+If we'd like to get the position of the "cursor" from crt_pos, we can do the following calculation:  
+if we have crt_pos=625 -> 625 % 80 = 65th column. and floor(625/80) = 7th row  
+`memmove(crt_buf, crt_buf + CRT_COLS, (CRT_SIZE - CRT_COLS) * sizeof(uint16_t));` moves all the data, except the list line up, and the loop clears up the last line. lastly `crt_pos -= CRT_COLS;` brings the position of the cursor back one line.
+
