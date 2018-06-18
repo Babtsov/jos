@@ -459,3 +459,22 @@ ap = 0xf0101a17 "x %d, y %x, z %d\n"
 so we see that intially, both ap and fmt point to the same thing.
 _List (in order of execution) each call to cons_putc, va_arg, and vcprintf. For cons_putc, list its argument as well. For va_arg, list what ap points to before and after the call. For vcprintf list the values of its two arguments._  
 
+## Exercise 9. 
+_Determine where the kernel initializes its stack, and exactly where in memory its stack is located. How does the kernel reserve space for its stack? And at which "end" of this reserved area is the stack pointer initialized to point to?_  
+The kernel initializes its stack at in entry.S by executing the following line: `movl    $(bootstacktop),%esp`
+`bootstacktop` address is defined in the `.data` section at the offset equal to `KSTKSIZE` (see at the bottom of entry.S source code).   Because the stack grows down, `bootstacktop` is where the stack pointer will initially point to and it will grow towards lower addresses of the `.data` section.
+To be more concrete where in memory the stack is located, let's first find the .data section:
+```
+vagrant@vagrant-ubuntu-trusty-32:~/jos$ objdump -h obj/kern/kernel | grep -B 1 ' .data'
+                  CONTENTS, ALLOC, LOAD, READONLY, DATA
+  4 .data         0000a304  f0108000  00108000  00009000  2**12
+ ```
+ we also see that from `memlayout.h`, KSTKSIZE = 8\*PGSIZE = 8\*4096 = 32768 = 0x8000
+ so the stack is allocated the address range is from `0xf0108000` to `0xf0110000`, and thus, `$esp` will initially point to 0xf0110000 (which is the actual value of KSTKSIZE).  
+To confirm this, we can look at the disassembly of `movl    $(bootstacktop),%esp` in kernel.asm:
+```
+        movl    $(bootstacktop),%esp
+f0100034:       bc 00 00 11 f0          mov    $0xf0110000,%esp
+```
+ 
+
