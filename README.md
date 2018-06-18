@@ -384,7 +384,7 @@ By convention, GCC does more: each function has a stack frame marked by %ebp, %e
     
 &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
 at the beginning of the function A:
-	     a_arg3
+       a_arg3
        a_arg2
        a_arg1
 %esp   <return address from A>
@@ -399,18 +399,23 @@ movl %esp, %ebp
                a_arg2
                a_arg1
                <return address from A>
-%esp, %ebp 	   <previous %epb>
+%esp, %ebp     <previous %epb>
 
 # stack state after having a local vars
-             a_arg3
-             a_arg2
-             a_arg1
-             <return address from A>
-%epb   		   <previous %epb>           -- A's frame --
-             a_local                   -- A's frame --
-             a_local2                  -- A's frame --
-%esp		     a_local3                  -- A's frame --
+               a_arg3
+               a_arg2
+               a_arg1
+               <return address from A>
+%epb           <previous %epb>           -- A's frame --
+               a_local                   -- A's frame --
+               a_local2                  -- A's frame --
+%esp           a_local3                  -- A's frame --
 
+to pop the stack frame, we can notice the following
+move %esp point to where %epb points
+%movl %epb, %esp
+then, restore %epb to its previous value and at the same time make %esp back to the return address from A:
+popl %ebp
 ```
 
 
