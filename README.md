@@ -332,18 +332,99 @@ As we can see, after that instruction, the 0xf0100000 addresses now contain the 
 and those look like the instructions from the kernel's .text section.   
 
 If we comment out the `movl %eax, %cr0` line, paging won't be enabled, and the first instruction fails is `movl	$0x0,%ebp`. the reason why it fails is that the prior instruction made us jump to address `0xf010002c`. Because paging is not enabled, this address is interpeted as a physical address, and since there is no RAM inside of it, qemu crashes. Indeed if we look at the qemu output, we see: `fatal: Trying to execute code outside RAM or ROM at 0xf010002c`
+
+## x86 assembly & GCC conventions 
+[original notes](https://pdos.csail.mit.edu/6.828/2017/lec/l-x86.html)   
+Intel syntax: op dst, src (Intel manuals!)  
+AT&T (gcc/gas) syntax: op src, dst (labs, xv6)  
+uses b, w, l suffix on instructions to specify size of operands  
+
+Example instruction	|What it does
+---           |      ---
+pushl %eax    |	subl $4, %esp 
+---           | movl %eax, (%esp) 
+popl %eax     |	movl (%esp), %eax 
+---           | addl $4, %esp 
+call 0x12345	| pushl %eip (not real) 
+---           | movl $0x12345, %eip (not real) 
+ret	          | popl %eip (not real)
+
+### GCC dictates how the stack is used. Contract between caller and callee on x86:
+* at entry to a function (i.e. just after call):
+  * %eip points at first instruction of function
+  * %esp+4 points at first argument
+  * %esp points at return address
+* after ret instruction:
+  * %eip contains return address
+  * %esp points at arguments pushed by caller
+  * called function may have trashed arguments
+  * %eax (and %edx, if return type is 64-bit) contains return value (or trash if function is void)
+  * %eax, %edx (above), and %ecx may be trashed
+  * %ebp, %ebx, %esi, %edi must contain contents from time of call ("callee save" registers)
+  * %eax, %ecx, %edx are "caller save" registers
+
+By convention, GCC does more: each function has a stack frame marked by %ebp, %esp:
+```
+		       +------------+   |
+		       | arg 2      |   \
+		       +------------+    >- previous function's stack frame
+		       | arg 1      |   /
+		       +------------+   |
+		       | ret %eip   |   /
+		       +============+   
+		       | saved %ebp |   \
+		%ebp-> +------------+   |
+		       |            |   |
+		       |   local    |   \
+		       | variables, |    >- current function's stack frame
+		       |    etc.    |   /
+		       |            |   |
+		       |            |   |
+		%esp-> +------------+   /
+    
+&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+at the beginning of the function A:
+	     a_arg3
+       a_arg2
+       a_arg1
+%esp   <return address from A>
+
+notice that the state of the stack of the stack consists of the frame of the other function
+
+# stack state after prologue:
+pushl %ebp
+movl %esp, %ebp
+
+               a_arg3
+               a_arg2
+               a_arg1
+               <return address from A>
+%esp, %ebp 	   <previous %epb>
+
+# stack state after having a local vars
+             a_arg3
+             a_arg2
+             a_arg1
+             <return address from A>
+%epb   		   <previous %epb>           -- A's frame --
+             a_local                   -- A's frame --
+             a_local2                  -- A's frame --
+%esp		     a_local3                  -- A's frame --
+
+```
+
+
 ## Exercise 8
 _We have omitted a small fragment of code - the code necessary to print octal numbers using patterns of the form "%o". Find and fill in this code fragment._   
 *see src for answer*
 
-## Be able to answer the following questions:  
+### Be able to answer the following questions:  
 
 _Explain the interface between printf.c and console.c. Specifically, what function does console.c export? How is this function used by printf.c?_  
 
 console.c exports `cputchar(int c)` which is a low level routine puts a character in the serial port, the parallel port, and in the CGA buffer, which appears on the screen. printf.c has a function `putch(int ch, int* cnt)` that uses this cputchar function exposed by console.c. It is worth mentioning that the useful function `cprintf` actually passes `putch` to vprintfmt which accepts a "generic function that prints a character".  
 
-
-Explain the following from console.c:_
+_Explain the following from console.c:_  
 ```
       if (crt_pos >= CRT_SIZE) {
               int i;
@@ -356,5 +437,20 @@ Explain the following from console.c:_
 looks like the crt is is a matrix of 25 rows and 80 columns, so CRT_SIZE is 25\*80=2000.  
 If we'd like to get the position of the "cursor" from crt_pos, we can do the following calculation:  
 if we have crt_pos=625 -> 625 % 80 = 65th column. and floor(625/80) = 7th row  
-`memmove(crt_buf, crt_buf + CRT_COLS, (CRT_SIZE - CRT_COLS) * sizeof(uint16_t));` moves all the data, except the list line up, and the loop clears up the last line. lastly `crt_pos -= CRT_COLS;` brings the position of the cursor back one line.
+`memmove(crt_buf, crt_buf + CRT_COLS, (CRT_SIZE - CRT_COLS) * sizeof(uint16_t));` moves all the data, except the list line up, and the loop clears up the last line. lastly `crt_pos -= CRT_COLS;` brings the position of the cursor back one line.  
+
+_Trace the execution of the following code step-by-step:_  
+```
+int x = 1, y = 3, z = 4;
+cprintf("x %d, y %x, z %d\n", x, y, z);
+```
+_In the call to cprintf(), to what does fmt point? To what does ap point?_  
+if we enter inside `vcprintf(const char *fmt, va_list ap)`, we see the following:
+```
+(gdb) info locals
+fmt = 0xf0101a17 "x %d, y %x, z %d\n"
+ap = 0xf0101a17 "x %d, y %x, z %d\n"
+```
+so we see that intially, both ap and fmt point to the same thing.
+_List (in order of execution) each call to cons_putc, va_arg, and vcprintf. For cons_putc, list its argument as well. For va_arg, list what ap points to before and after the call. For vcprintf list the values of its two arguments._  
 
