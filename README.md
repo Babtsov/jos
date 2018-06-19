@@ -2,9 +2,143 @@
 lab link: https://pdos.csail.mit.edu/6.828/2017/labs/lab1/  
 guide with useful gdb commands: https://pdos.csail.mit.edu/6.828/2017/labguide.html  
 the x command: http://visualgdb.com/gdbreference/commands/x  
-x86 registers: https://wiki.osdev.org/CPU_Registers_x86  
 solutions link: https://github.com/Clann24/jos  
+
+## x86 assembly & GCC conventions 
+[original notes](https://pdos.csail.mit.edu/6.828/2017/lec/l-x86.html)   
 godbolt example of converting C code to assembly: https://godbolt.org/g/oHLKRo  
+x86 registers: https://wiki.osdev.org/CPU_Registers_x86  
+
+Intel syntax: op dst, src (Intel manuals!)  
+AT&T (gcc/gas) syntax: op src, dst (labs, xv6)  
+uses b, w, l suffix on instructions to specify size of operands  
+
+Example instruction	|What it does
+---           |      ---
+pushl %eax    |	subl $4, %esp 
+---           | movl %eax, (%esp) 
+popl %eax     |	movl (%esp), %eax 
+---           | addl $4, %esp 
+call 0x12345	| pushl %eip (not real) 
+---           | movl $0x12345, %eip (not real) 
+ret	          | popl %eip (not real)
+
+### GCC dictates how the stack is used. Contract between caller and callee on x86:
+* at entry to a function (i.e. just after call):
+  * %eip points at first instruction of function
+  * %esp+4 points at first argument
+  * %esp points at return address
+* after ret instruction:
+  * %eip contains return address
+  * %esp points at arguments pushed by caller
+  * called function may have trashed arguments
+  * %eax (and %edx, if return type is 64-bit) contains return value (or trash if function is void)
+  * %eax, %edx (above), and %ecx may be trashed
+  * %ebp, %ebx, %esi, %edi must contain contents from time of call ("callee save" registers)
+  * %eax, %ecx, %edx are "caller save" registers
+
+By convention, GCC does more: each function has a stack frame marked by %ebp, %esp:
+```
+		       +------------+   |
+		       | arg 2      |   \
+		       +------------+    >- previous function's stack frame
+		       | arg 1      |   /
+		       +------------+   |
+		       | ret %eip   |   /
+		       +============+   
+		       | saved %ebp |   \
+		%ebp-> +------------+   |
+		       |            |   |
+		       |   local    |   \
+		       | variables, |    >- current function's stack frame
+		       |    etc.    |   /
+		       |            |   |
+		       |            |   |
+		%esp-> +------------+   /
+    
+---------------------------------------------------------------------------
+at the beginning of the function A:
+       a_arg3
+       a_arg2
+       a_arg1
+%esp   <return address from A>
+
+notice that the state of the stack of the stack consists of the frame of the other function
+
+# stack state after prologue:
+pushl %ebp
+movl %esp, %ebp
+
+               a_arg3
+               a_arg2
+               a_arg1
+               <return address from A>
+%esp, %ebp     <previous %epb>
+
+# stack state after having a local vars
+               a_arg3
+               a_arg2
+               a_arg1
+               <return address from A>
+%epb           <previous %epb>           -- A's frame --
+               a_local                   -- A's frame --
+               a_local2                  -- A's frame --
+%esp           a_local3                  -- A's frame --
+
+to pop the stack frame, we can notice the following
+move %esp point to where %epb points
+%movl %epb, %esp
+then, restore %epb to its previous value and at the same time make %esp back to the return address from A:
+popl %ebp
+```
+
+## ELF and binary files
+The kernel itself is an ELF file. We can get a peek into the code (instructions) of the kernel using the following:
+```
+vagrant@vagrant-ubuntu-trusty-32:~/jos$ objdump -d obj/kern/kernel | head -n 17
+
+obj/kern/kernel:     file format elf32-i386
+
+
+Disassembly of section .text:
+
+f0100000 <_start+0xeffffff4>:
+f0100000:	02 b0 ad 1b 00 00    	add    0x1bad(%eax),%dh
+f0100006:	00 00                	add    %al,(%eax)
+f0100008:	fe 4f 52             	decb   0x52(%edi)
+f010000b:	e4 66                	in     $0x66,%al
+
+f010000c <entry>:
+f010000c:	66 c7 05 72 04 00 00 	movw   $0x1234,0x472
+f0100013:	34 12
+f0100015:	b8 00 00 11 00       	mov    $0x110000,%eax
+f010001a:	0f 22 d8             	mov    %eax,%cr3
+```
+and here are the various sections of the ELF binary:
+```
+vagrant@vagrant-ubuntu-trusty-32:~/jos$ objdump -h obj/kern/kernel
+
+obj/kern/kernel:     file format elf32-i386
+
+Sections:
+Idx Name          Size      VMA       LMA       File off  Algn
+  0 .text         00001917  f0100000  00100000  00001000  2**4
+                  CONTENTS, ALLOC, LOAD, READONLY, CODE
+  1 .rodata       00000714  f0101920  00101920  00002920  2**5
+                  CONTENTS, ALLOC, LOAD, READONLY, DATA
+  2 .stab         00003889  f0102034  00102034  00003034  2**2
+                  CONTENTS, ALLOC, LOAD, READONLY, DATA
+  3 .stabstr      000018af  f01058bd  001058bd  000068bd  2**0
+                  CONTENTS, ALLOC, LOAD, READONLY, DATA
+  4 .data         0000a300  f0108000  00108000  00009000  2**12
+                  CONTENTS, ALLOC, LOAD, DATA
+  5 .bss          00000644  f0112300  00112300  00013300  2**5
+                  ALLOC
+  6 .comment      0000002b  00000000  00000000  00013300  2**0
+                  CONTENTS, READONLY
+```
+
+
 ## booting
 MIT's memory space map
 ```
@@ -201,51 +335,6 @@ _line 5:_ let's look at the memory in terms of binary form: since `c[0]` is `a[1
 _line 6:_  `b = (int *) a + 1;` means b points to `a[1]`, or in other words, b is 4 bytes higher than a.  
 we know a is pointing to address `0x7ffeef1949d0` so add 4 to it and we get `0x7ffeef1949d4` for b. Now `c = (int *) ((char *) a + 1);` means c points to 1 byte higher than a hence its address is `0x7ffeef1949d1`. All this works because the width of `char` is always 1 (by the C standard, as far as I know), and `int` is 4 bytes in the 32bit x86 architecture.  
 
-## ELF and binary files
-As mentioned, the kernel is an ELF file. We can get a peek into the code (instructions) of the kernel using the following:
-```
-vagrant@vagrant-ubuntu-trusty-32:~/jos$ objdump -d obj/kern/kernel | head -n 17
-
-obj/kern/kernel:     file format elf32-i386
-
-
-Disassembly of section .text:
-
-f0100000 <_start+0xeffffff4>:
-f0100000:	02 b0 ad 1b 00 00    	add    0x1bad(%eax),%dh
-f0100006:	00 00                	add    %al,(%eax)
-f0100008:	fe 4f 52             	decb   0x52(%edi)
-f010000b:	e4 66                	in     $0x66,%al
-
-f010000c <entry>:
-f010000c:	66 c7 05 72 04 00 00 	movw   $0x1234,0x472
-f0100013:	34 12
-f0100015:	b8 00 00 11 00       	mov    $0x110000,%eax
-f010001a:	0f 22 d8             	mov    %eax,%cr3
-```
-and here are the various sections of the ELF binary:
-```
-vagrant@vagrant-ubuntu-trusty-32:~/jos$ objdump -h obj/kern/kernel
-
-obj/kern/kernel:     file format elf32-i386
-
-Sections:
-Idx Name          Size      VMA       LMA       File off  Algn
-  0 .text         00001917  f0100000  00100000  00001000  2**4
-                  CONTENTS, ALLOC, LOAD, READONLY, CODE
-  1 .rodata       00000714  f0101920  00101920  00002920  2**5
-                  CONTENTS, ALLOC, LOAD, READONLY, DATA
-  2 .stab         00003889  f0102034  00102034  00003034  2**2
-                  CONTENTS, ALLOC, LOAD, READONLY, DATA
-  3 .stabstr      000018af  f01058bd  001058bd  000068bd  2**0
-                  CONTENTS, ALLOC, LOAD, READONLY, DATA
-  4 .data         0000a300  f0108000  00108000  00009000  2**12
-                  CONTENTS, ALLOC, LOAD, DATA
-  5 .bss          00000644  f0112300  00112300  00013300  2**5
-                  ALLOC
-  6 .comment      0000002b  00000000  00000000  00013300  2**0
-                  CONTENTS, READONLY
-```
 ## Exercise 5
 _Trace through the first few instructions of the boot loader again and identify the first instruction that would "break" or otherwise do the wrong thing if you were to get the boot loader's link address wrong. Then change the link address in boot/Makefrag to something wrong, run make clean, recompile the lab with make, and trace into the boot loader again to see what happens. Don't forget to change the link address back and make clean again afterward!_  
 
@@ -333,91 +422,6 @@ and those look like the instructions from the kernel's .text section.
 
 If we comment out the `movl %eax, %cr0` line, paging won't be enabled, and the first instruction fails is `movl	$0x0,%ebp`. the reason why it fails is that the prior instruction made us jump to address `0xf010002c`. Because paging is not enabled, this address is interpeted as a physical address, and since there is no RAM inside of it, qemu crashes. Indeed if we look at the qemu output, we see: `fatal: Trying to execute code outside RAM or ROM at 0xf010002c`
 
-## x86 assembly & GCC conventions 
-[original notes](https://pdos.csail.mit.edu/6.828/2017/lec/l-x86.html)   
-Intel syntax: op dst, src (Intel manuals!)  
-AT&T (gcc/gas) syntax: op src, dst (labs, xv6)  
-uses b, w, l suffix on instructions to specify size of operands  
-
-Example instruction	|What it does
----           |      ---
-pushl %eax    |	subl $4, %esp 
----           | movl %eax, (%esp) 
-popl %eax     |	movl (%esp), %eax 
----           | addl $4, %esp 
-call 0x12345	| pushl %eip (not real) 
----           | movl $0x12345, %eip (not real) 
-ret	          | popl %eip (not real)
-
-### GCC dictates how the stack is used. Contract between caller and callee on x86:
-* at entry to a function (i.e. just after call):
-  * %eip points at first instruction of function
-  * %esp+4 points at first argument
-  * %esp points at return address
-* after ret instruction:
-  * %eip contains return address
-  * %esp points at arguments pushed by caller
-  * called function may have trashed arguments
-  * %eax (and %edx, if return type is 64-bit) contains return value (or trash if function is void)
-  * %eax, %edx (above), and %ecx may be trashed
-  * %ebp, %ebx, %esi, %edi must contain contents from time of call ("callee save" registers)
-  * %eax, %ecx, %edx are "caller save" registers
-
-By convention, GCC does more: each function has a stack frame marked by %ebp, %esp:
-```
-		       +------------+   |
-		       | arg 2      |   \
-		       +------------+    >- previous function's stack frame
-		       | arg 1      |   /
-		       +------------+   |
-		       | ret %eip   |   /
-		       +============+   
-		       | saved %ebp |   \
-		%ebp-> +------------+   |
-		       |            |   |
-		       |   local    |   \
-		       | variables, |    >- current function's stack frame
-		       |    etc.    |   /
-		       |            |   |
-		       |            |   |
-		%esp-> +------------+   /
-    
-&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
-at the beginning of the function A:
-       a_arg3
-       a_arg2
-       a_arg1
-%esp   <return address from A>
-
-notice that the state of the stack of the stack consists of the frame of the other function
-
-# stack state after prologue:
-pushl %ebp
-movl %esp, %ebp
-
-               a_arg3
-               a_arg2
-               a_arg1
-               <return address from A>
-%esp, %ebp     <previous %epb>
-
-# stack state after having a local vars
-               a_arg3
-               a_arg2
-               a_arg1
-               <return address from A>
-%epb           <previous %epb>           -- A's frame --
-               a_local                   -- A's frame --
-               a_local2                  -- A's frame --
-%esp           a_local3                  -- A's frame --
-
-to pop the stack frame, we can notice the following
-move %esp point to where %epb points
-%movl %epb, %esp
-then, restore %epb to its previous value and at the same time make %esp back to the return address from A:
-popl %ebp
-```
-
 
 ## Exercise 8
 _We have omitted a small fragment of code - the code necessary to print octal numbers using patterns of the form "%o". Find and fill in this code fragment._   
@@ -459,7 +463,7 @@ ap = 0xf0101a17 "x %d, y %x, z %d\n"
 so we see that intially, both ap and fmt point to the same thing.
 _List (in order of execution) each call to cons_putc, va_arg, and vcprintf. For cons_putc, list its argument as well. For va_arg, list what ap points to before and after the call. For vcprintf list the values of its two arguments._  
 
-## Exercise 9. 
+## Exercise 9
 _Determine where the kernel initializes its stack, and exactly where in memory its stack is located. How does the kernel reserve space for its stack? And at which "end" of this reserved area is the stack pointer initialized to point to?_  
 The kernel initializes its stack at in entry.S by executing the following line: `movl    $(bootstacktop),%esp`
 `bootstacktop` address is defined in the `.data` section at the offset equal to `KSTKSIZE` (see at the bottom of entry.S source code).   Because the stack grows down, `bootstacktop` is where the stack pointer will initially point to and it will grow towards lower addresses of the `.data` section.
