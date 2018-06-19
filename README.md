@@ -91,7 +91,8 @@ move %esp point to where %epb points
 then, restore %epb to its previous value and at the same time make %esp back to the return address from A:
 popl %ebp
 ```
-### Example of an execution [godbolt link](https://godbolt.org/g/fNGrgd)
+### Example of an execution ([godbolt link](https://godbolt.org/g/fNGrgd))
+In this example, we'll instruct the compiler to use a 4 byte stack allignment (for simplicity's sake).  
 the function `sum`'s definition in C:  
 ```c
 int sum(int a,int b) {
