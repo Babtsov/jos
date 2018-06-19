@@ -4,7 +4,7 @@ guide with useful gdb commands: https://pdos.csail.mit.edu/6.828/2017/labguide.h
 the x command: http://visualgdb.com/gdbreference/commands/x  
 x86 registers: https://wiki.osdev.org/CPU_Registers_x86  
 solutions link: https://github.com/Clann24/jos  
-
+godbolt example of converting C code to assembly: https://godbolt.org/g/oHLKRo  
 ## booting
 MIT's memory space map
 ```
