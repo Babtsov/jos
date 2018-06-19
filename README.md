@@ -91,7 +91,62 @@ move %esp point to where %epb points
 then, restore %epb to its previous value and at the same time make %esp back to the return address from A:
 popl %ebp
 ```
+### Example of an execution [godbolt link](https://godbolt.org/g/fNGrgd)
+```c
+int sum(int a,int b) {
+    int x = a + b + 61;
+    int y = b + a;
+    int z = a + 3;
+    return doubleNum(x) + doubleNum(y) + doubleNum(z);
+}
+```
+annotated assembly:
+```assembly
 
+stack composition:
+%epb+12:	variable b
+%epb+8:		variable a
+%epb+4:		<return address>
+%ebp:		<previous %ebp value>
+%ebp-4:		<previous value of %ebx>
+%ebp-8:		variable x
+%ebp-12:	variable y
+$esp-16, %esp:	variable z
+
+sum:
+pushl %ebp              ;; prologue
+movl %esp, %ebp         ;; prologue
+pushl %ebx              ;; function is going to use ebx later on, so push it
+subl $12, %esp          ;; allocate 3 words (4 bytes each) for local variables
+movl 8(%ebp), %edx      ;; store a in edx
+movl 12(%ebp), %eax     ;; store b in eax
+addl %edx, %eax         ;; a+b is in eax
+addl $61, %eax          ;; a+b+c is in eax
+movl %eax, -8(%ebp)     ;; store the content of eax into x
+movl 12(%ebp), %edx     ;; store b in edx
+movl 8(%ebp), %eax      ;; store a in eax 
+addl %edx, %eax         ;; b + a is in eax
+movl %eax, -12(%ebp)    ;; store the content of eax into y
+movl 8(%ebp), %eax      ;; store a into a eax
+addl $3, %eax           ;; a+3 is in eax
+movl %eax, -16(%ebp)    ;; store a+3 in z
+pushl -8(%ebp)          ;; push x, which is the first argument of doubleNum, into the stack
+call doubleNum          ;; call the function
+addl $4, %esp           ;; pop the argument x from the stack
+movl %eax, %ebx         ;; store doubleNum's return value to ebx, so doubleNum(x) is in ebx
+pushl -12(%ebp)         ;; push y, which is the first argument of doubleNum, into the stack
+call doubleNum          ;; call the function
+addl $4, %esp           ;; pop the argument y from the stack
+addl %eax, %ebx         ;; store doubleNum's return value to ebx, so doubleNum(x) + doubleNum(y) is in ebx
+pushl -16(%ebp)         ;; push x, which is the first argument of doubleNum, into the stack
+call doubleNum          ;; call the function
+addl $4, %esp           ;; pop the argument z from the stack
+addl %ebx, %eax         ;; add ebx's value doubleNum(x) + doubleNum(y) to eax's value doubleNum(z) so now eax is doubleNum(x) + doubleNum(y) + doubleNum(z)
+movl -4(%ebp), %ebx     ;; restore ebx into its previous value 
+leave                   ;; restore esp's value into the original address (stored in ebp)
+ret                     ;; pop the return address, and load it into eip
+
+```
 ## ELF and binary files
 The kernel itself is an ELF file. We can get a peek into the code (instructions) of the kernel using the following:
 ```
