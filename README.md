@@ -539,5 +539,86 @@ To confirm this, we can look at the disassembly of `movl    $(bootstacktop),%esp
         movl    $(bootstacktop),%esp
 f0100034:       bc 00 00 11 f0          mov    $0xf0110000,%esp
 ```
- 
+## Exercise 10
+_To become familiar with the C calling conventions on the x86, find the address of the test_backtrace function in obj/kern/kernel.asm, set a breakpoint there, and examine what happens each time it gets called after the kernel starts. How many 32-bit words does each recursive nesting level of test_backtrace push on the stack, and what are those words?_  
+using the command `(gdb) p $sp`, we can see that each invocation gives us these addresses for the stack pointer:  
+```
+$14 = (void *) 0xf010ffdc  (address right after test_backtrace(5) was called)                                                               
+$15 = (void *) 0xf010ffbc 
+$16 = (void *) 0xf010ff9c                                                                
+$17 = (void *) 0xf010ff7c
+```                                                                 
+The differences between the addresses (for example, 0xf010ffdc - 0xf010ffbc) is 32 bytes. This means that each function call occupies 32 bytes in the stack. Each word on a 32 bit machine is 4 bytes so we have a total of 8 words per function.
+let's look where test_backtrace is being called:
+```
+        // Test the stack backtrace function (lab 1 only)
+        test_backtrace(5);
+f0100126:       c7 04 24 05 00 00 00    movl   $0x5,(%esp)
+f010012d:       e8 0e ff ff ff          call   f0100040 <test_backtrace>
+
+        // Drop into the kernel monitor.
+        while (1)
+                monitor(NULL);
+f0100132:       c7 04 24 00 00 00 00    movl   $0x0,(%esp)
+f0100139:       e8 bb 06 00 00          call   f01007f9 <monitor>
+f010013e:       eb f2                   jmp    f0100132 <i386_init+0x95>
+```
+and also, let's look at the disassembly of the test_backtrace:
+```
+void
+test_backtrace(int x)
+{
+f0100040:       55                      push   %ebp
+f0100041:       89 e5                   mov    %esp,%ebp
+f0100043:       53                      push   %ebx
+f0100044:       83 ec 14                sub    $0x14,%esp
+f0100047:       8b 5d 08                mov    0x8(%ebp),%ebx
+        cprintf("entering test_backtrace %d\n", x);
+f010004a:       89 5c 24 04             mov    %ebx,0x4(%esp)
+f010004e:       c7 04 24 e0 19 10 f0    movl   $0xf01019e0,(%esp)
+f0100055:       e8 27 09 00 00          call   f0100981 <cprintf>
+        if (x > 0)
+f010005a:       85 db                   test   %ebx,%ebx
+f010005c:       7e 0d                   jle    f010006b <test_backtrace+0x2b>
+                test_backtrace(x-1);
+f010005e:       8d 43 ff                lea    -0x1(%ebx),%eax
+f0100061:       89 04 24                mov    %eax,(%esp)
+f0100064:       e8 d7 ff ff ff          call   f0100040 <test_backtrace>
+f0100069:       eb 1c                   jmp    f0100087 <test_backtrace+0x47>
+}
+```
+
+## content of the stack during test_backtrace(5)
+```
+0xf010ffe0  <arg to test_backtrace (5)>
+0xf010ffdc  <ret address into i386_init (f0100132)>
+0xf010ffd8  <previous ebp>                                   <- test_backtrace(5)'s %ebp points here
+0xf010ffd4  <previous ebx>   
+0xf010ffd0
+0xf010ffcc
+0xf010ffc8
+0xf010ffc4  <value of x (5)>
+0xf010ffc0  <value of x-1 (4)> 	                             <- test_backtrace(5)'s %esp points here
+0xf010ffbc  <ret address into test_backtrace(5) (f0100069)> 
+```
+
+
+## explanation of the content of the stack:
+we know that 0xf010ffdc is stored in %esp just after `call   f0100040 <test_backtrace>` is executed. This means that the address 0xf010ffdc will also contain the return address, which is f0100132. Next, we can exepct that the argument to test_backtrace (which is 5 in this case) will be stored 4 bytes above 0xf010ffdc, which gives us the address 0xf010ffe0.  
+Next, we see that upon the entry to test_backtrace we have the following instructions that modify the stack:
+```
+push   %ebp
+push   %ebx
+sub    $0x14,%esp
+```
+This means that our stack pointer will move 0x4 + 0x4 + 0x14 bytes down. So, 0xf010ffdc - 0x1c = 0xf010ffc0, so this will be the address before `call   f0100981 <cprintf>` is executed. The `cprintf` function is free to use the stack, but it will restore it upon its exit, so the address of the stack pointer will still be at 0xf010ffc0 upon the next call to test_backtrace. lastly, when `call   f0100040 <test_backtrace>` is executed, the return address f0100069 will be pushed into the stack, and now the stack pointer will point to 0xf010ffbc.
+## Comparing the results to gdb's output
+We can confirm the results of the above explanation by executing the following:
+```
+(gdb) x/10xw 0xf010ffbc
+0xf010ffbc:     0xf0100069      0x00000004      0x00000005      0x00000000
+0xf010ffcc:     0x00010094      0x00010094      0x00010094      0xf010fff8
+0xf010ffdc:     0xf0100132      0x00000005
+```
+We see that the value 0x00010094 is being stored in 0xf010ffcc and 0xf010ffd0, this might me some garbage on the stack left from prior function executions. Notice that this demonstrates the idea of stack variables should never be assumed to be initialized to 0. Had we had variables stored in these locations, that's the initial value they would have had.
 
