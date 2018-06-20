@@ -2,6 +2,7 @@
 lab link: https://pdos.csail.mit.edu/6.828/2017/labs/lab1/  
 guide with useful gdb commands: https://pdos.csail.mit.edu/6.828/2017/labguide.html  
 the x command: http://visualgdb.com/gdbreference/commands/x  
+Zen of assembly book: http://www.jagregory.com/abrash-zen-of-asm/   
 solutions link: https://github.com/Clann24/jos  
 
 ## x86 assembly & GCC conventions 
