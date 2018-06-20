@@ -92,8 +92,9 @@ then, restore %epb to its previous value and at the same time make %esp back to 
 popl %ebp
 ```
 ### Example of an execution ([godbolt link](https://godbolt.org/g/fNGrgd))
-In this example, we'll instruct the compiler to use a 4 byte stack allignment (for simplicity's sake).  
-the function `sum`'s definition in C:  
+In this example, we'll instruct the compiler to use a 4 byte stack allignment (for simplicity's sake). See [here](https://research.csiro.au/tsblog/debugging-stories-stack-alignment-matters/) for why stack needs to be aligned.    
+
+The function `sum`'s definition in C:  
 ```c
 int sum(int a,int b) {
     int x = a + b + 61;
