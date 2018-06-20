@@ -35,8 +35,3 @@ cprintf(const char *fmt, ...)
 	return cnt;
 }
 
-int
-colorprintf(enum pcolor color, const char *fmt, ...)
-{
-	return 0;
-}
