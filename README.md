@@ -622,3 +622,26 @@ We can confirm the results of the above explanation by executing the following:
 ```
 We see that the value 0x00010094 is being stored in 0xf010ffcc and 0xf010ffd0, this might me some garbage on the stack left from prior function executions. Notice that this demonstrates the idea of stack variables should never be assumed to be initialized to 0. Had we had variables stored in these locations, that's the initial value they would have had.
 
+## Exercise 11
+_Implement the backtrace function_  
+```C
+int
+mon_backtrace(int argc, char **argv, struct Trapframe *tf)
+{
+        uint32_t my_ebp; // this is the frame pointer of mon_trace itself.
+        asm volatile("movl %%ebp,%0" : "=r" (my_ebp));
+        cprintf("Stack backtrace:\n");
+        uint32_t ebp = my_ebp;
+        while (ebp != 0) {
+                uint32_t eip = *((uint32_t*)ebp + 1);
+                cprintf("ebp %08x eip %08x args", ebp, eip);
+                for (int i = 2; i < 7; i++) {
+                        uint32_t arg = *((uint32_t*)ebp + i);
+                        cprintf(" %08x ", arg);
+                }
+                cprintf("\n");
+                ebp = *(uint32_t*)ebp;
+        }
+        return 0;
+}
+```
