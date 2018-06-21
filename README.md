@@ -5,6 +5,7 @@ the x command: http://visualgdb.com/gdbreference/commands/x
 Zen of assembly book: http://www.jagregory.com/abrash-zen-of-asm/   
 linker documentation: http://www.scoberlin.de/content/media/http/informatik/gcc_docs/ld_3.html  
 stabs doumentation: https://sourceware.org/gdb/current/onlinedocs/stabs.html#Symbol-Tables  
+more info about stabs from ibm: https://www.ibm.com/developerworks/library/os-debugging/index.html   
 solutions link: https://github.com/Clann24/jos  
 
 ## x86 assembly & GCC conventions 
