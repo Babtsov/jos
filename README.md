@@ -11,6 +11,7 @@ solutions link: https://github.com/Clann24/jos
 [original notes](https://pdos.csail.mit.edu/6.828/2017/lec/l-x86.html)   
 godbolt example of converting C code to assembly: https://godbolt.org/g/oHLKRo  
 x86 registers: https://wiki.osdev.org/CPU_Registers_x86  
+call/ret instructions and the stack: https://cs.nyu.edu/courses/fall04/V22.0201-003/ia32_chap_03.pdf  
 
 Intel syntax: op dst, src (Intel manuals!)  
 AT&T (gcc/gas) syntax: op src, dst (labs, xv6)  
