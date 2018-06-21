@@ -3,6 +3,8 @@ lab link: https://pdos.csail.mit.edu/6.828/2017/labs/lab1/
 guide with useful gdb commands: https://pdos.csail.mit.edu/6.828/2017/labguide.html  
 the x command: http://visualgdb.com/gdbreference/commands/x  
 Zen of assembly book: http://www.jagregory.com/abrash-zen-of-asm/   
+linker documentation: http://www.scoberlin.de/content/media/http/informatik/gcc_docs/ld_3.html  
+stabs doumentation: https://sourceware.org/gdb/current/onlinedocs/stabs.html#Symbol-Tables  
 solutions link: https://github.com/Clann24/jos  
 
 ## x86 assembly & GCC conventions 
@@ -622,3 +624,136 @@ We can confirm the results of the above explanation by executing the following:
 ```
 We see that the value 0x00010094 is being stored in 0xf010ffcc and 0xf010ffd0, this might me some garbage on the stack left from prior function executions. Notice that this demonstrates the idea of stack variables should never be assumed to be initialized to 0. Had we had variables stored in these locations, that's the initial value they would have had.
 
+## Exercise 11
+_Implement the backtrace function_  
+```C
+int
+mon_backtrace(int argc, char **argv, struct Trapframe *tf)
+{
+        uint32_t my_ebp; // this is the frame pointer of mon_trace itself.
+        asm volatile("movl %%ebp,%0" : "=r" (my_ebp));
+        cprintf("Stack backtrace:\n");
+        uint32_t ebp = my_ebp;
+        while (ebp != 0) {
+                uint32_t eip = *((uint32_t*)ebp + 1);
+                cprintf("ebp %08x eip %08x args", ebp, eip);
+                for (int i = 2; i < 7; i++) {
+                        uint32_t arg = *((uint32_t*)ebp + i);
+                        cprintf(" %08x ", arg);
+                }
+                cprintf("\n");
+                ebp = *(uint32_t*)ebp;
+        }
+        return 0;
+}
+```
+## Exercise 12
+_Modify your stack backtrace function to display, for each eip, the function name, source file name, and line number corresponding to that eip.In debuginfo_eip, where do \_\_STAB\_* come from?_  
+\_\_STAB_BEGIN\_\_ and \_\_STAB_END\_\_ are symbols defined in the linker script kernel.ld  
+if we look at the linker file:
+```
+.stab : {
+        PROVIDE(__STAB_BEGIN__ = .);
+        *(.stab);
+        PROVIDE(__STAB_END__ = .);
+        BYTE(0)         /* Force the linker to allocate space
+                           for this section */
+}
+```
+we see that those are the beginning and end addresses in the .stab section. similar thing with \_\_STABSTR_BEGIN\_\_.  
+So if we were to check what address those symbols get, we can try:
+```
+vagrant@vagrant-ubuntu-trusty-32:~/jos$ objdump -h obj/kern/kernel | grep -C 1 stab
+                  CONTENTS, ALLOC, LOAD, READONLY, DATA
+  2 .stab         00004321  f01028b0  001028b0  000038b0  2**2
+                  CONTENTS, ALLOC, LOAD, READONLY, DATA
+  3 .stabstr      00001aa9  f0106bd1  00106bd1  00007bd1  2**0
+                  CONTENTS, ALLOC, LOAD, READONLY, DATA
+```
+We also observe that those sections are contagious in memory: `hex(0xf01028b0+0x00004321) = 0xf0106bd1`
+let's try to confirm the kernel indeed loads them by looking up the content of the memory in gdb:
+```
+(gdb) b i386_init
+Breakpoint 1 at 0xf01000a0: file kern/init.c, line 24.
+(gdb) c
+(gdb) x/5s 0xf0106bd1
+0xf0106bd1:     ""
+0xf0106bd2:     "{standard input}"
+0xf0106be3:     "kern/entry.S"
+0xf0106bf0:     "kern/entrypgdir.c"
+0xf0106c02:     "gcc2_compiled."
+```
+and we can compare this to the many strings we see inside `objdump -G obj/kern/kernel`.  
+Lastly, another way we can confirm the addresses is to look inside kernel.asm:
+```
+                stabs = __STAB_BEGIN__;
+f0100f8d:       c7 45 f0 b0 28 10 f0    movl   $0xf01028b0,-0x10(%ebp)
+                stab_end = __STAB_END__;
+f0100f94:       c7 45 ec d0 6b 10 f0    movl   $0xf0106bd0,-0x14(%ebp)
+                stabstr = __STABSTR_BEGIN__;
+f0100f9b:       c7 45 e8 d1 6b 10 f0    movl   $0xf0106bd1,-0x18(%ebp)
+                stabstr_end = __STABSTR_END__;
+f0100fa2:       c7 45 e4 79 86 10 f0    movl   $0xf0108679,-0x1c(%ebp)
+```
+notice the numbers f01028b0 and f0106bd1 are what we saw at the output of `objdump -h obj/kern/kernel`  
+## solution
+add this in `kdebug.c`:
+```C
+stab_binsearch(stabs, &lline, &rline, N_SLINE, addr);
+if (lline <= rline) {
+        info->eip_line = stabs[rline].n_desc;
+} else {
+        return -1;
+}
+```
+and this in `monitor.c`:   
+```C
+int
+mon_backtrace(int argc, char **argv, struct Trapframe *tf)
+{
+        uint32_t my_ebp; // this is the frame pointer of mon_trace itself.
+        asm volatile("movl %%ebp,%0" : "=r" (my_ebp));
+        cprintf("Stack backtrace:\n");
+        uint32_t ebp = my_ebp;
+        while (ebp != 0) {
+                uint32_t eip = *((uint32_t*)ebp + 1);
+                cprintf("ebp %08x eip %08x args", ebp, eip);
+                for (int i = 2; i < 7; i++) {
+                        uint32_t arg = *((uint32_t*)ebp + i);
+                        cprintf(" %08x ", arg);
+                }
+                cprintf("\n");
+
+                struct Eipdebuginfo info;
+                debuginfo_eip(eip, &info);
+                uintptr_t offset = eip - info.eip_fn_addr;
+                cprintf("\t%s:%d: ", info.eip_file, info.eip_line);
+                cprintf("%.*s+%d\n",info.eip_fn_namelen, info.eip_fn_name, offset);
+
+                ebp = *(uint32_t*)ebp;
+        }
+        return 0;
+}
+```
+
+Then we can observe the following results:
+```
+ebp f0110f38 eip f0100d30 args 00000001  f0110f58  00000000  0000000d  f010294c
+	     kern/monitor.c:125: runcmd+306
+ebp f0110fa8 eip f0100d9d args f01137c9  00000000  f0110fd8  f010009e  f0102404
+	     kern/monitor.c:143: monitor+69
+ebp f0110fd8 eip f0100121 args 00000000  00001aac  00000660  00000000  00000000
+	     kern/init.c:45: i386_init+129
+ebp f0110ff8 eip f010003e args 00000003  00001003  00002003  00003003  00004003
+	     kern/entry.S:83: <unknown>+0
+```
+Notice that the line numbers are based on the line to which the function *returns* instead of the line where the call is being made. This makes sense because we derived those from the %eip register which would store the return address. It is worth mentioning that this is unlike GDB which prints the line number where the function was called. to compare it to gdb:
+```
+(gdb) bt
+#0  mon_backtrace (argc=1, argv=0xf0110f58, tf=0x0) at kern/monitor.c:62
+#1  0xf0100d30 in runcmd (buf=0xf01137c9 <buf+9> "", tf=0x0) at kern/monitor.c:125
+#2  0xf0100d9d in monitor (tf=0x0) at kern/monitor.c:143
+#3  0xf0100121 in i386_init () at kern/init.c:45
+#4  0xf010003e in relocated () at kern/entry.S:80
+```
+Notice the difference between `entry.S:83` and `entry.S:80`. Other than this slight difference, the rest of the stack trace looks similar and potentially be useful for future debugging.
