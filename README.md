@@ -82,4 +82,30 @@ lab link: https://pdos.csail.mit.edu/6.828/2017/labs/lab2/
 // The PDX, PTX, PGOFF, and PGNUM macros decompose linear addresses as shown.
 // To construct a linear address la from PDX(la), PTX(la), and PGOFF(la),
 // use PGADDR(PDX(la), PTX(la), PGOFF(la)).
+
+PADDR(kva) {
+  return (physaddr_t)kva - KERNBASE
+}
+```
+generate gcc preprocessed file: `gcc -E pmap.c  -DJOS_KERNEL -I/home/vagrant/jos`  
+## Exercise 1
+In the boot_alloc function, we have `extern char end[];` 
+In the linker script we see: `PROVIDE(end = .);` right after the .bss section. So this looks like the linker simply assigned the value of of the end of the .bss section to this, but the variable itself is located in the data section.
+```
+(gdb) p (char *)end
+$8 = 0xfff10004 <error: Cannot access memory at address 0xfff10004>
+(gdb) p &end
+$9 = (<data variable, no debug info> *) 0xf0118bd0
+```
+
+and if we check with objdump:
+```
+vagrant@vagrant-ubuntu-trusty-32:~/jos$ objdump -h obj/kern/kernel | egrep 'Idx|\.data|\.bss'
+Idx Name          Size      VMA       LMA       File off  Algn
+  4 .data         0000a564  f010e000  0010e000  0000f000  2**12
+  5 .bss          00000650  f0118580  00118580  00019564  2**5
+```
+```python
+>>> hex(0xf0118580+0x00000650)
+'0xf0118bd0'
 ```
