@@ -59,9 +59,27 @@ lab link: https://pdos.csail.mit.edu/6.828/2017/labs/lab2/
  *    USTABDATA ---->  +------------------------------+ 0x00200000        |
  *                     |       Empty Memory (*)       |                   |
  *    0 ------------>  +------------------------------+                 --+
- *
- * (*) Note: The kernel ensures that "Invalid Memory" is *never* mapped.
- *     "Empty Memory" is normally unmapped, but user programs may map pages
- *     there if desired.  JOS user programs map pages temporarily at UTEMP.
  */
- ```
+ // User read-only virtual page table (see 'uvpt' below)
+#define UVPT            (ULIM - PTSIZE)
+
+// Read-only copies of the Page structures
+#define UPAGES          (UVPT - PTSIZE)
+
+// Read-only copies of the global env structures
+#define UENVS           (UPAGES - PTSIZE)
+ 
+ 
+// A linear address 'la' has a three-part structure as follows:
+//
+// +--------10------+-------10-------+---------12----------+
+// | Page Directory |   Page Table   | Offset within Page  |
+// |      Index     |      Index     |                     |
+// +----------------+----------------+---------------------+
+//  \--- PDX(la) --/ \--- PTX(la) --/ \---- PGOFF(la) ----/
+//  \---------- PGNUM(la) ----------/
+//
+// The PDX, PTX, PGOFF, and PGNUM macros decompose linear addresses as shown.
+// To construct a linear address la from PDX(la), PTX(la), and PGOFF(la),
+// use PGADDR(PDX(la), PTX(la), PGOFF(la)).
+```
