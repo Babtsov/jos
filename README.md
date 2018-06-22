@@ -98,7 +98,7 @@ $1 = 0xf0119000 ""
 $2 = 0xfff10004 <error: Cannot access memory at address 0xfff10004>
 (gdb) p &end
 $3 = (<data variable, no debug info> *) 0xf0118bd0```
-
+```
 and if we check with objdump:
 ```
 vagrant@vagrant-ubuntu-trusty-32:~/jos$ objdump -h obj/kern/kernel | egrep 'Idx|\.data|\.bss'
