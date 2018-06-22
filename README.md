@@ -92,11 +92,12 @@ generate gcc preprocessed file: `gcc -E pmap.c  -DJOS_KERNEL -I/home/vagrant/jos
 In the boot_alloc function, we have `extern char end[];` 
 In the linker script we see: `PROVIDE(end = .);` right after the .bss section. So this looks like the linker simply assigned the value of of the end of the .bss section to this, but the variable itself is located in the data section.
 ```
+(gdb) p nextfree
+$1 = 0xf0119000 ""
 (gdb) p (char *)end
-$8 = 0xfff10004 <error: Cannot access memory at address 0xfff10004>
+$2 = 0xfff10004 <error: Cannot access memory at address 0xfff10004>
 (gdb) p &end
-$9 = (<data variable, no debug info> *) 0xf0118bd0
-```
+$3 = (<data variable, no debug info> *) 0xf0118bd0```
 
 and if we check with objdump:
 ```
