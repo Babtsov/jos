@@ -1,5 +1,6 @@
 # Lab 2 notes
 lab link: https://pdos.csail.mit.edu/6.828/2017/labs/lab2/  
+potentially useful ans: http://web.mit.edu/~ternus/Public/Public_old/pmap.c  
 ```
 /*
  * Virtual memory map:                                Permissions
