@@ -7,6 +7,7 @@
 #include <inc/assert.h>
 
 #include <kern/pmap.h>
+
 #include <kern/kclock.h>
 
 // These variables are set by i386_detect_memory()
@@ -81,10 +82,12 @@ static void check_page_installed_pgdir(void);
 // If we're out of memory, boot_alloc should panic.
 // This function may ONLY be used during initialization,
 // before the page_free_list list has been set up.
+
+static char *nextfree;	// virtual address of next byte of free memory
 static void *
 boot_alloc(uint32_t n)
 {
-	static char *nextfree;	// virtual address of next byte of free memory
+
 	char *result;
 
 	// Initialize nextfree if this is the first time.
@@ -96,14 +99,26 @@ boot_alloc(uint32_t n)
 		extern char end[];
 		nextfree = ROUNDUP((char *) end, PGSIZE);
 	}
+	result = nextfree;
 
 	// Allocate a chunk large enough to hold 'n' bytes, then update
 	// nextfree.  Make sure nextfree is kept aligned
 	// to a multiple of PGSIZE.
-	//
-	// LAB 2: Your code here.
+	nextfree = ROUNDUP(result + n, PGSIZE);
+	if ((uintptr_t) nextfree >= KERNBASE + PTSIZE) {
+		cprintf("boot_alloc: out of memory\n");
+		panic("boot_alloc: failed to allocate %d bytes", n);
+	}
+	return result;
+}
 
-	return NULL;
+void
+test_boot_alloc(uint32_t n)
+{
+	cprintf("allocate: %d bytes; ", n);
+	cprintf("nextfree: %p; ",(char *) nextfree);
+	cprintf("addr: %p; ",(char *) boot_alloc(n));
+	cprintf("nextfree: %p\n",(char *) nextfree);
 }
 
 // Set up a two-level page table:
@@ -124,8 +139,17 @@ mem_init(void)
 	// Find out how much memory the machine has (npages & npages_basemem).
 	i386_detect_memory();
 
+	test_boot_alloc(0);
+	test_boot_alloc(0);
+	test_boot_alloc(1);
+	test_boot_alloc(PGSIZE);
+	test_boot_alloc(0);
+	test_boot_alloc(PGSIZE + 1);
+	test_boot_alloc(2*PGSIZE);
+	test_boot_alloc(10);
+
 	// Remove this line when you're ready to test this function.
-	panic("mem_init: This function is not finished\n");
+//	panic("mem_init: This function is not finished\n");
 
 	//////////////////////////////////////////////////////////////////////
 	// create initial page directory.
@@ -148,7 +172,8 @@ mem_init(void)
 	// array.  'npages' is the number of physical pages in memory.  Use memset
 	// to initialize all fields of each struct PageInfo to 0.
 	// Your code goes here:
-
+	pages = (struct PageInfo *) boot_alloc(npages * sizeof(struct PageInfo));
+	memset(pages, 0, PGSIZE);
 
 	//////////////////////////////////////////////////////////////////////
 	// Now that we've allocated the initial kernel data structures, we set
@@ -160,6 +185,7 @@ mem_init(void)
 
 	check_page_free_list(1);
 	check_page_alloc();
+	return;
 	check_page();
 
 	//////////////////////////////////////////////////////////////////////
@@ -251,8 +277,14 @@ page_init(void)
 	// Change the code to reflect this.
 	// NB: DO NOT actually touch the physical memory corresponding to
 	// free pages!
-	size_t i;
-	for (i = 0; i < npages; i++) {
+	for (int i = 1 ; i < npages_basemem; i++) {
+		pages[i].pp_ref = 0;
+		pages[i].pp_link = page_free_list;
+		page_free_list = &pages[i];
+	}
+	uint32_t firstFree = (uint32_t) PADDR(boot_alloc(0));
+	assert(firstFree % PGSIZE == 0);
+	for (int i = firstFree / PGSIZE; i < npages; i++) {
 		pages[i].pp_ref = 0;
 		pages[i].pp_link = page_free_list;
 		page_free_list = &pages[i];
@@ -274,8 +306,16 @@ page_init(void)
 struct PageInfo *
 page_alloc(int alloc_flags)
 {
-	// Fill this function in
-	return 0;
+	struct PageInfo* pp = page_free_list;
+	if (!pp) {
+		return NULL;
+	}
+	page_free_list = pp->pp_link;
+	pp->pp_link = NULL;
+	if (alloc_flags & ALLOC_ZERO) {
+		memset(page2kva(pp), 0, PGSIZE);
+	}
+	return pp;
 }
 
 //
@@ -288,6 +328,10 @@ page_free(struct PageInfo *pp)
 	// Fill this function in
 	// Hint: You may want to panic if pp->pp_ref is nonzero or
 	// pp->pp_link is not NULL.
+	assert(pp->pp_ref == 0);
+	assert(pp->pp_link == NULL);
+	pp->pp_link = page_free_list;
+	page_free_list = pp;
 }
 
 //
