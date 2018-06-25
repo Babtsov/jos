@@ -205,6 +205,20 @@ page_free(struct PageInfo *pp)
         page_free_list = pp;
 }
 ```
+## Exercise 2
+Readding material:  
+[5.2 Page Translation](https://pdos.csail.mit.edu/6.828/2017/readings/i386/s05_02.htm)  
+[6.4 Page-Level Protection](https://pdos.csail.mit.edu/6.828/2017/readings/i386/s06_04.htm)  
+
+## Exercise 3
+_Assuming that the following JOS kernel code is correct, what type should variable x have, uintptr_t or physaddr\_t?_
+```
+	mystery_t x;
+	char* value = return_a_pointer();
+	*value = 10;
+	x = (mystery_t) value;
+```
+since the function return_a_pointer() returns a virtual address (all pointers are virtual addresses), it should be `uintptr_t`. Then `x` will contain the integer representation of the virtual address of `value`.
 
 ## random notes:
 generate gcc preprocessed file: `gcc -E pmap.c  -DJOS_KERNEL -I/home/vagrant/jos`  
