@@ -80,7 +80,7 @@ struct PageInfo {
         uint16_t pp_ref;
 };
 ```
-and we create an array of these as following:  
+and we can allocate an array of these as following (see explanation about boot_alloc in the next section):  
 `pages = (struct PageInfo *) boot_alloc(npages * sizeof(struct PageInfo));`  
 thus, each page frame (of physical memory) will have a corresponding metadata entry in this array. 
 We can use the following helper functions:
@@ -95,11 +95,11 @@ static inline void* page2kva(struct PageInfo *pp) {
 }
 ```
 ### implementing boot_alloc
-boot_alloc is a "memory allocator", somewhat similar in its operation to the `brk()` system call. except unlike `brk()`, it operates on physical pages (page frames). As already mentioned, the virtual addresses 0xf0000000 to 0xf03fffff are mapped to physical addresses 0x00000000 to 0x003fffff, and this is the address range that `boot_alloc` will be supposed to manage. The function signature of `boot_alloc` suggests that we should operate on virtual addresses instead of physical ones, but since there is a one-to-one correspondence betwwen them, it shouldn't get too messy to talk about only virtual addresses (although let's not forget that it's actually physical memory being allocated).  
+boot_alloc is a "memory allocator", somewhat similar in its operation to the linux `brk()` system call. except unlike `brk()`, it operates on physical pages (page frames). As already mentioned, the virtual addresses 0xf0000000 to 0xf03fffff are mapped to physical addresses 0x00000000 to 0x003fffff, and this is the address range that `boot_alloc` will be supposed to manage (technically, it will manage all the addresses above the last address used for storing the kenel data. The first such address is 0xf0118bd0). The function signature of `boot_alloc` suggests that we should operate on virtual addresses instead of physical ones, but since there is a one-to-one correspondence betwwen them, it shouldn't get too messy to talk about only virtual addresses (although let's not forget that it's actually physical memory being allocated).  
 
 `boot_alloc` keeps track of what is allocated and what is not allocated with the `static char *nextfree` variable. addresses that are lower than `nextfree` are considered allocated, and addresses equal or above `nextfree` (up to 0xf03fffff)  are considered unallocated. As a consequence, `nextfree` points to the first free address.    
 So "Allocating 1 page" means adding 4096 to the address `nextfree` is storing (nextfree += 4096). When we get a request to allocate, say 3 pages, we will store the current value of `nextfree` into `result`, add 3\*4096 to  `nextfree` and will return `result`. this way, the memory region between `result` and `nextfree` is reserved to whomever called `boot_alloc` (notice that in this case, nextfree - result= 3\*4096).  
-It is also worth mentioning that the addresses of nextfree and result must be divisible by 4096 (page size). Thus, the code is:
+It is also worth mentioning that the addresses of nextfree and result must be divisible by 4096 (page size). Thus, the first address returned by this function is 0xf0119000).  
 ```C
 static char *nextfree;  // virtual address of next byte of free memory
 static void *
@@ -126,6 +126,50 @@ boot_alloc(uint32_t n)
                 panic("boot_alloc: failed to allocate %d bytes", n);
         }
         return result;
+}
+```
+### implementing page_init
+The purpose of this function is to create and initialize a data structure that will keep track of the metadata of all free page frames (physical pages) in the system. A linked list can be a good choice for this because it's very efficient to add to and to remove from. We already have an aray that contains the metadata of all the page frames `struct PageInfo *pages`, so we'll use the elements of this array and add all the free page frames into the linked list represented by `static struct PageInfo *page_free_list`  
+
+How do we know which page frames are free in the extended memory (physical memory above 1M)?  
+As previously noted, `boot_alloc` keeps track of all the allocated memory starting from `0xf0119000`, and if we call `boot_alloc(0)`, we'll get the first address which has not been allocated by `boot_alloc`. Because `boot_alloc` returns virtual addresses, and we are interested in the physical address of the page frame, we'll need to use the `PADDR` macro to convert it to the physical address, and then divide it by the page size PGSIZE (4096) to get the appropriate index into the `pages` array.
+```C
+void
+page_init(void)
+{
+        //  1) Mark physical page 0 as in use.
+        //     This way we preserve the real-mode IDT and BIOS structures
+        //     in case we ever need them.  (Currently we don't, but...)
+        pages[0].pp_ref = 1;
+        pages[0].pp_link = NULL;
+
+	//  2) The rest of base memory, [PGSIZE, npages_basemem * PGSIZE)
+        //     is free.
+        for (int i = 1 ; i < npages_basemem; i++) {
+                pages[i].pp_ref = 0;
+                pages[i].pp_link = page_free_list;
+                page_free_list = &pages[i];
+        }
+
+        //  3) Then comes the IO hole [IOPHYSMEM, EXTPHYSMEM), which must
+        //     never be allocated.
+        uint32_t first_free_pa = (uint32_t) PADDR(boot_alloc(0));
+        assert(first_free_pa % PGSIZE == 0);
+        int free_pa_pg_indx = first_free_pa / PGSIZE;
+        for (int i = npages_basemem ; i < free_pa_pg_indx; i++) {
+                pages[i].pp_ref = 1;
+                pages[i].pp_link = NULL;
+        }
+
+	//  4) Then extended memory [EXTPHYSMEM, ...).
+        //     Some of it is in use, some is free. Where is the kernel
+        //     in physical memory?  Which pages are already in use for
+        //     page tables and other data structures?
+        for (int i = free_pa_pg_indx; i < npages; i++) {
+                pages[i].pp_ref = 0;
+                pages[i].pp_link = page_free_list;
+                page_free_list = &pages[i];
+        }
 }
 ```
 ### implementing page_alloc and page_free
@@ -236,7 +280,7 @@ generate gcc preprocessed file: `gcc -E pmap.c  -DJOS_KERNEL -I/home/vagrant/jos
 // Read-only copies of the global env structures
 #define UENVS           (UPAGES - PTSIZE)
 ```
-## Useful Macro descriptions
+## Other Useful Macro Descriptions
 ```C
 // A linear address 'la' has a three-part structure as follows:
 //
