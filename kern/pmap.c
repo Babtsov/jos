@@ -139,18 +139,6 @@ mem_init(void)
 	// Find out how much memory the machine has (npages & npages_basemem).
 	i386_detect_memory();
 
-	test_boot_alloc(0);
-	test_boot_alloc(0);
-	test_boot_alloc(1);
-	test_boot_alloc(PGSIZE);
-	test_boot_alloc(0);
-	test_boot_alloc(PGSIZE + 1);
-	test_boot_alloc(2*PGSIZE);
-	test_boot_alloc(10);
-
-	// Remove this line when you're ready to test this function.
-//	panic("mem_init: This function is not finished\n");
-
 	//////////////////////////////////////////////////////////////////////
 	// create initial page directory.
 	kern_pgdir = (pde_t *) boot_alloc(PGSIZE);
@@ -173,7 +161,8 @@ mem_init(void)
 	// to initialize all fields of each struct PageInfo to 0.
 	// Your code goes here:
 	pages = (struct PageInfo *) boot_alloc(npages * sizeof(struct PageInfo));
-	memset(pages, 0, PGSIZE);
+	uintptr_t pages_region_sz = (uintptr_t)boot_alloc(0) - (uintptr_t)pages;
+	memset(pages, 0, pages_region_sz);
 
 	//////////////////////////////////////////////////////////////////////
 	// Now that we've allocated the initial kernel data structures, we set
@@ -187,7 +176,7 @@ mem_init(void)
 	check_page_alloc();
 
 	check_page();
-	return;
+
 	//////////////////////////////////////////////////////////////////////
 	// Now we set up virtual memory
 
@@ -197,7 +186,9 @@ mem_init(void)
 	//    - the new image at UPAGES -- kernel R, user R
 	//      (ie. perm = PTE_U | PTE_P)
 	//    - pages itself -- kernel RW, user NONE
-	// Your code goes here:
+
+	boot_map_region(kern_pgdir, (uintptr_t)pages, PTSIZE, PADDR(pages), PTE_W | PTE_P);
+	boot_map_region(kern_pgdir, UPAGES, PTSIZE, PADDR(pages), PTE_U | PTE_P);
 
 	//////////////////////////////////////////////////////////////////////
 	// Use the physical memory that 'bootstack' refers to as the kernel
@@ -209,7 +200,9 @@ mem_init(void)
 	//       the kernel overflows its stack, it will fault rather than
 	//       overwrite memory.  Known as a "guard page".
 	//     Permissions: kernel RW, user NONE
-	// Your code goes here:
+
+	uintptr_t backed_stack = KSTACKTOP-KSTKSIZE;
+	boot_map_region(kern_pgdir, backed_stack, KSTKSIZE, PADDR(bootstack), PTE_W | PTE_P);
 
 	//////////////////////////////////////////////////////////////////////
 	// Map all of physical memory at KERNBASE.
@@ -218,8 +211,9 @@ mem_init(void)
 	// We might not have 2^32 - KERNBASE bytes of physical memory, but
 	// we just set up the mapping anyway.
 	// Permissions: kernel RW, user NONE
-	// Your code goes here:
 
+	uintptr_t pa_end = 0xffffffff - KERNBASE + 1;
+	boot_map_region(kern_pgdir, KERNBASE, pa_end, 0, PTE_W | PTE_P); 
 	// Check that the initial page directory has been set up correctly.
 	check_kern_pgdir();
 
@@ -370,8 +364,6 @@ page_decref(struct PageInfo* pp)
 // Hint 3: look at inc/mmu.h for useful macros that mainipulate page
 // table and page directory entries.
 //
-// pde_t stores the virtual address of a page table
-// pte_t stores the virtual address of a page
 pte_t *
 pgdir_walk(pde_t *pgdir, const void *va, int create)
 {
@@ -410,7 +402,7 @@ boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm
 	assert(size % PGSIZE == 0);
 	assert(pa % PGSIZE == 0);
 	assert(va % PGSIZE == 0);
-	for (int i = 0; i < size; i++) {
+	for (int i = 0, n = size / PGSIZE; i < n; i++) {
 		pte_t *pte = pgdir_walk(pgdir,(void*) (va + i * PGSIZE), true);
 		assert(pte != NULL);
 		*pte = (pa + i * PGSIZE) | perm | PTE_P;
