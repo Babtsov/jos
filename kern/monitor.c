@@ -23,13 +23,21 @@ struct Command {
 };
 
 static struct Command commands[] = {
+	{ "q", "Quit the monitor", mon_quit },
 	{ "help", "Display this list of commands", mon_help },
 	{ "kerninfo", "Display information about the kernel", mon_kerninfo },
 	{ "backtrace", "Display stack trace", mon_backtrace },
-	{ "vaddrinfo", "Display information about virtual address", mon_vaddrinfo}
+	{ "vaddrinfo", "Display information about virtual address", mon_vaddrinfo },
+	{ "pgdir", "Display the contents of a page directory or a page table", mon_pgdir }
 };
 
 /***** Implementations of basic kernel monitor commands *****/
+
+int
+mon_quit(int argc, char **argv, struct Trapframe *tf)
+{
+	return -1;
+}
 
 int
 mon_help(int argc, char **argv, struct Trapframe *tf)
@@ -122,17 +130,17 @@ mon_vaddrinfo(int argc, char **argv, struct Trapframe *tf)
 {
 	if (argc != 2) {
 		cprintf("usage: vaddr <virtual address>\n");
-		return -1;
+		return 0;
 	}
 	uintptr_t address;
 	if (extract_hex_addr(&address, argv[1]) < 0) {
 		cprintf("invalid address entered: %s\n",argv[1]);
-		return -1;
+		return 0;
 	}
 	uintptr_t page = ROUNDDOWN(address, PGSIZE);
 	pde_t *pgdir = KADDR(rcr3());
-	cprintf("Page virtual address:\t\t%x\n", page);
-	cprintf("Page dir virtual address:\t%x\t", pgdir);
+	cprintf("Page virtual address:\t\t%08x\n", page);
+	cprintf("Page dir virtual address:\t%08x\t", pgdir);
 	int pdoffset = PDX(address);
 	print_pagetable_entry(pgdir, pdoffset);
 
@@ -156,7 +164,48 @@ mon_vaddrinfo(int argc, char **argv, struct Trapframe *tf)
 	return 0;
 
 }
+int
+mon_pgdir(int argc, char **argv, struct Trapframe *tf)
+{
+	if (argc < 2 || argc > 4) {
+		cprintf("usage: pgdir <address>\n");
+		cprintf("       pgdir <address> <offset>\n");
+		cprintf("       pgdir <address> <begin offset> <end offset>\n");
+		return 0;
+	}
 
+	uintptr_t address;
+	if (extract_hex_addr(&address, argv[1]) < 0) {
+		cprintf("invalid address %s\n", argv[1]);
+		return 0;
+	} else if (address % PGSIZE != 0) {
+		cprintf("Address of pgdir must be paged aligned.\n");
+		return 0;
+	} else if (!page_lookup((void *) KADDR(rcr3()), (void *)address, NULL)) {
+		cprintf("Virtual address %x is not mapped.\n", address);
+		return 0;
+	}
+
+	uint16_t begin, end;
+	if (argc == 2) {
+		begin = 0;
+		end = NPTENTRIES - 1;
+	} else if (argc == 3) {
+		begin = end = (uint16_t) strtol(argv[2], NULL, 16);
+	} else if (argc == 4) {
+		begin = (uint16_t) strtol(argv[2], NULL, 16);
+		end = (uint16_t) strtol(argv[3], NULL, 16);
+	}
+	if (begin > end || end >= NPTENTRIES) {
+		cprintf("invalid offset(s): begin should be <= end, and\n");
+		cprintf("offset(s) should be between 0 and %x\n", NPTENTRIES - 1);
+		return 0;
+	}
+	for (int i = begin; i <= end; i++) {
+		print_pagetable_entry((pte_t *)address, i);
+	}
+	return 0;
+}
 
 /***** Kernel monitor command interpreter *****/
 
