@@ -10,6 +10,7 @@
 #include <kern/console.h>
 #include <kern/monitor.h>
 #include <kern/kdebug.h>
+#include <kern/pmap.h>
 
 #define CMDBUF_SIZE	80	// enough for one VGA text line
 
@@ -24,7 +25,8 @@ struct Command {
 static struct Command commands[] = {
 	{ "help", "Display this list of commands", mon_help },
 	{ "kerninfo", "Display information about the kernel", mon_kerninfo },
-	{ "backtrace", "Display stack trace", mon_backtrace }
+	{ "backtrace", "Display stack trace", mon_backtrace },
+	{ "vaddrinfo", "Display information about virtual address", mon_vaddrinfo}
 };
 
 /***** Implementations of basic kernel monitor commands *****/
@@ -82,6 +84,78 @@ mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 	return 0;
 }
 
+int
+extract_hex_addr(uintptr_t *address, const char *s)
+{
+        const char *removed_prefix = prefix_find(s, "0x");
+        const char *addr_str = removed_prefix ? removed_prefix : s;
+        if (strlen(addr_str) > 8) {
+		return -1;
+        }
+	char *endptr = NULL;
+        long addr = strtol(addr_str, &endptr, 16);
+	if (!endptr || *endptr != '\0') {
+		return -1;
+	}
+	assert(address);
+	*address = (uintptr_t)addr;
+	return 0;
+}
+void
+print_pagetable_entry(pte_t *pte_table, int offset)
+{
+	pte_t pte = pte_table[offset];
+	cprintf("%03x: %08x ",offset, PTE_ADDR(pte));
+	if ((pte & 0x1ff) == 0) {
+		cprintf("NONE\n");
+		return;
+	}
+	if (pte & PTE_P) cprintf("PTE_P ");
+	if (pte & PTE_W) cprintf("PTE_W ");
+	if (pte & PTE_U) cprintf("PTE_U ");
+
+	cprintf("\n");
+}
+
+int
+mon_vaddrinfo(int argc, char **argv, struct Trapframe *tf)
+{
+	if (argc != 2) {
+		cprintf("usage: vaddr <virtual address>\n");
+		return -1;
+	}
+	uintptr_t address;
+	if (extract_hex_addr(&address, argv[1]) < 0) {
+		cprintf("invalid address entered: %s\n",argv[1]);
+		return -1;
+	}
+	uintptr_t page = ROUNDDOWN(address, PGSIZE);
+	pde_t *pgdir = KADDR(rcr3());
+	cprintf("Page virtual address:\t\t%x\n", page);
+	cprintf("Page dir virtual address:\t%x\t", pgdir);
+	int pdoffset = PDX(address);
+	print_pagetable_entry(pgdir, pdoffset);
+
+	pde_t pde = pgdir[pdoffset];
+	if (!(pde & PTE_P)) {
+		cprintf("Address not found in page directory\n");
+		return 0;
+	}
+	pte_t *pagetable = KADDR(PTE_ADDR(pde));
+	cprintf("Page table virtual address:\t%08x\t", pagetable);
+	int ptoffset = PTX(address);
+	print_pagetable_entry(pagetable, ptoffset);
+
+	pte_t pte = pagetable[ptoffset];
+	if (!(pte & PTE_P)) {
+                cprintf("Address not found in page table\n");
+                return 0;
+        }
+	cprintf("Page frame address:\t\t%08x\n", PTE_ADDR(pte));
+	cprintf("Physical address:\t\t%08x\n", PTE_ADDR(pte) + PGOFF(address));
+	return 0;
+
+}
 
 
 /***** Kernel monitor command interpreter *****/

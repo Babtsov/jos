@@ -112,14 +112,6 @@ boot_alloc(uint32_t n)
 	return result;
 }
 
-void
-test_boot_alloc(uint32_t n)
-{
-	cprintf("allocate: %d bytes; ", n);
-	cprintf("nextfree: %p; ",(char *) nextfree);
-	cprintf("addr: %p; ",(char *) boot_alloc(n));
-	cprintf("nextfree: %p\n",(char *) nextfree);
-}
 
 // Set up a two-level page table:
 //    kern_pgdir is its linear (virtual) address of the root
@@ -187,8 +179,10 @@ mem_init(void)
 	//      (ie. perm = PTE_U | PTE_P)
 	//    - pages itself -- kernel RW, user NONE
 
-	boot_map_region(kern_pgdir, (uintptr_t)pages, PTSIZE, PADDR(pages), PTE_W | PTE_P);
-	boot_map_region(kern_pgdir, UPAGES, PTSIZE, PADDR(pages), PTE_U | PTE_P);
+	boot_map_region(kern_pgdir, UPAGES, PTSIZE, PADDR(pages), PTE_U);
+	// this is not necessary as we are going to map all RAM to KERNBASE anyway
+//	boot_map_region(kern_pgdir, (uintptr_t)pages, PTSIZE, PADDR(pages), PTE_W);
+
 
 	//////////////////////////////////////////////////////////////////////
 	// Use the physical memory that 'bootstack' refers to as the kernel
@@ -202,7 +196,7 @@ mem_init(void)
 	//     Permissions: kernel RW, user NONE
 
 	uintptr_t backed_stack = KSTACKTOP-KSTKSIZE;
-	boot_map_region(kern_pgdir, backed_stack, KSTKSIZE, PADDR(bootstack), PTE_W | PTE_P);
+	boot_map_region(kern_pgdir, backed_stack, KSTKSIZE, PADDR(bootstack), PTE_W);
 
 	//////////////////////////////////////////////////////////////////////
 	// Map all of physical memory at KERNBASE.
@@ -213,7 +207,7 @@ mem_init(void)
 	// Permissions: kernel RW, user NONE
 
 	uintptr_t pa_end = 0xffffffff - KERNBASE + 1;
-	boot_map_region(kern_pgdir, KERNBASE, pa_end, 0, PTE_W | PTE_P); 
+	boot_map_region(kern_pgdir, KERNBASE, pa_end, 0, PTE_W);
 	// Check that the initial page directory has been set up correctly.
 	check_kern_pgdir();
 
@@ -470,7 +464,7 @@ page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
 {
 	// Fill this function in
 	pte_t *pte = pgdir_walk(pgdir, va, false);
-	if (!pte) {
+	if (!pte || !(*pte & PTE_P)) {
 		return NULL;
 	}
 	if (pte_store) {
@@ -523,6 +517,15 @@ tlb_invalidate(pde_t *pgdir, void *va)
 // --------------------------------------------------------------
 // Checking functions.
 // --------------------------------------------------------------
+
+void
+test_boot_alloc(uint32_t n)
+{
+        cprintf("allocate: %d bytes; ", n);
+        cprintf("nextfree: %p; ",(char *) nextfree);
+        cprintf("addr: %p; ",(char *) boot_alloc(n));
+        cprintf("nextfree: %p\n",(char *) nextfree);
+}
 
 //
 // Check that the pages on the page_free_list are reasonable.
