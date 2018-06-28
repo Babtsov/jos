@@ -436,7 +436,11 @@ page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 		return -E_NO_MEM;
 	}
 	if (PTE_ADDR(*pte) == page2pa(pp)) {
+		if ((*pte & 0x1ff) == perm) {
+			return 0;
+		}
 		*pte = page2pa(pp) | perm | PTE_P;
+		tlb_invalidate(pgdir, va);
 		return 0;
 	}
 	if (*pte & PTE_P) {
