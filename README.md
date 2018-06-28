@@ -388,7 +388,7 @@ boot_map_region(kern_pgdir, KERNBASE, pa_end, 0, PTE_W);
 ### question 2
 _What entries (rows) in the page directory have been filled in at this point? What addresses do they map and where do they point? In other words, fill out this table as much as possible:_
 
-, we can do the following:
+We can use the following to perform the relevant calculations:
 ```python
 # To calculate the base virtual address from the offset
 hex(int(math.pow(2,22))*offset)
@@ -396,7 +396,6 @@ hex(int(math.pow(2,22))*offset)
 address // int(math.pow(2,22))
 ```
 We should have the mapping established by mem_init,
-
 
 
 Entry | Base Virtual Address  | Points to (logically):
@@ -412,6 +411,30 @@ Entry | Base Virtual Address  | Points to (logically):
 ...|...| unmapped
 0|0x00000000| unmapped
 
+### Question 3
+_We have placed the kernel and user environment in the same address space. Why will user programs not be able to read or write the kernel's memory? What specific mechanisms protect the kernel memory?_  
+They won't be able to do it because pages belonging to the kernel have the PTE_U bit off. This means that if a user program tries to read that page, the processor will generate a page fault, which will transfer control back to the OS.
+### Question 4
+_What is the maximum amount of physical memory that this operating system can support? Why?_  
+Because the OS maps all RAM on the last 268 MB of virtual address space, this will be the maximum amount supported.
+
+### Question 5
+_How much space overhead is there for managing memory, if we actually had the maximum amount of physical memory? How is this overhead broken down?_  
+
+If this question means "maximum amount of physical memory" as 4GB, then:  
+4294967296 (total RAM) / 4096 (bytes per page) = 1048576 frames.
+each frame occupies a page table entry, which is 4 bytes, so total overhead is 4194304 bytes. If we also count the page directory itself, this would be additional 1024\*4 = 4096 bytes. So total overhead is 4,198,400 bytes. This is excluding other data structures allocated by the kernel in order to manage paging.
+
+### Question 6
+_Revisit the page table setup in kern/entry.S and kern/entrypgdir.c. Immediately after we turn on paging, EIP is still a low number (a little over 1MB). At what point do we transition to running at an EIP above KERNBASE? What makes it possible for us to continue executing at a low EIP between when we enable paging and when we begin running at an EIP above KERNBASE? Why is this transition necessary?_  
+The idea of mapping the first 4MB of the RAM to virtual addresses 0x00000000 and 0xf0000000 is what allows us to execute on both low and high addresses. We transition to running at EIP above KERNBASE when we jump to the C code, which is actually linked at address f0100000.
+
+
+## Challenge
+
+I implemented the following additional kernel monitor commands (see the source code for full code):
+* command to dump contents of a page directory or a page table in a pretty printed way
+* command that accepts a virtual address and walks the page directory until it reaches the (physical) page frame, printing the offsets and the virtual addresses of the page directory and the page table, and lastly printing the physical address of the page frame.
 
 
 ## random notes:
