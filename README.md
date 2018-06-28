@@ -2,8 +2,8 @@
 lab link: https://pdos.csail.mit.edu/6.828/2017/labs/lab2/  
 potentially useful ans: http://web.mit.edu/~ternus/Public/Public_old/pmap.c  
 
-## Background
-Before configuring the paging system with `mem_init`, we note that the virtual memory subsystem has already been configured in entry.S in the following code:
+## Setup of paging before the code of lab 2
+Before configuring the paging system with `mem_init`, we note that the virtual memory subsystem has already been configured in `entry.S` using the following code:
 ```asm
 # Load the physical address of entry_pgdir into cr3.  entry_pgdir
 # is defined in entrypgdir.c.
@@ -32,6 +32,31 @@ we can confirm the upper limit 0xf03fffff in gdb:
 (gdb) x/1b 0xf0400000-1
 0xf03fffff:     0x00
 ```
+## Summary of how the memory management works in lab 2
+As we can see from `entry_pgdir`, we have the first 4 MB of the RAM available for us to use mapped starting from virtual address 0xf0000000 to 0xf03fffff, and that's the region we are going to focus on. (We will not use the virtual address space 0x00000000 to 0x003fffff because this is outside the region that the kernel is linked against (and those two regions map to the same 4 MB of RAM anyway.))  
+We'd like to start allocating memory for us to use for dynamicly allocated data structures, but we have several problems:
+1) we don't have something like a `malloc` for us to use to "dynamically allocate stuff on the heap". This means we'll need to create our own allocator.
+2) The kernel code and data is already present in RAM (and correspondingly, this means that some virtual address space in 0xf0000000 to 0xf03fffff is already in use), and we need to make sure not to overwrite this data by accident.
+3) We need to keep track of which addresses have already been allocated, and which ones are free.
+
+All of those problem are addressed by the `boot_alloc` function. This will be our "temporary" memory allocator which we'll use to start allocating data structures dynamically. It is temporary because it can manage only the first 4MB of RAM, but that's ok because that's the only memory region mapped anyway (and we can't use the RAM addresses that has not been mapped to virtual addresses).  
+
+Now that we have a memory allocator, we'll allocate an array of 1024 entries for our page directory `kern_pgdir`. This directory will be the new page directory that is meant to replace the temporary `entry_pgdir`. Notice that this means that memory addresses returned by `boot_alloc` will have to be page aligned (divisible by 4096). This is because the x86 hardware mandates page alignment for the page directory.
+
+We will be using a data structure that is a hybrid between a linked list and an array to keep track of which (physical) page frames are allocated and which ones are free. Each page frame will have its own `PageInfo` struct that will also store some metadata, and those stucts will form a linked list. The amount of page frames we'll be managing depends on how much RAM we have in the computer, so we'll use `boot_alloc` to allocate an array of `PageInfo` proportional to the amount of RAM available, and will call this array `struct PageInfo *pages`. For example, if we have 131072K RAM, and each page is 4K, then we'll need an array of 32,768 PageInfo elements.
+
+The head of the linked list is `struct PageInfo *page_free_list` and what we'll need to do next is to add all the free frames to this linked list. When adding the free page frames, it is important to first add the free page frames from the original 4MB region managed by `boot_alloc` because although all others page frames are marked as "free", we have no way of accessing them as they are not yet mapped to virtual addresses.
+
+Once we are done with this, we will no longer need to use `boot_alloc` in order to allocate memory because `page_free_list` will now contain all the frames in the original 4MB region that were not yet allocated by `boot_alloc`. In order to effectively use `page_free_list`, we'll create a function called `page_alloc` that "mark" a page frame as in use by popping it off the `page_free_list`.   
+
+The way we can access the data stored in a page frame directly is through the `page2kva` macro. This is how `page2kva` works:  
+1) let's say we popped a struct PageInfo from the `page_free_list` (let's call it `pp`). How do we know the physical address that `pp` corresponds to? We can calculate it by finding what index `pp` is in the `pages` array and multiply it by the page size: `(pp - pages)*4096`.
+2) But the processor can't address physical address directly, how knowing the physical address help us? Each page frame in the original 4MB region is mapped at virtual address located at an offset of 0xf0000000. So, for example, if we want to write to a page frame located in the physical address `0x01234000`, we'll need to tell the processor to write to the virtual address `0xf1234000`. Again, this trick works only for the page frames located in the original 4MB region of memory that has mapped by `entry_pgdir`. 
+
+Then we proceed with mapping the various memory regions as specified in the comments of `mem_init`. One interesting thing to note is that `mem_init` tells us to do is map the (physical) RAM addresses from 0x00000000 - 0x0fffffff into the virtual addresses 0xf0000000-0xffffffff (that's 268 MB, which is more RAM that we might even have!). How much memory overhead this 268MB of address space will create?
+Here is how we can calculate it: 268435456 bytes is 65536 page frames (divide by 4096). Each frame occupies 4 bytes in a page table entry. So this means we'll need 65536 * 4 = 262,144 bytes to store all the page tables of these mappings. This looks like it can fit 👍. If want to know how many page tables this will require: 65536 (total frames) / 1024 (frames mapped in each page table) = 64 page tables.
+
+The last thing left for us to do is to load the physical address of `kern_pgdir` into `cr3` register, and our new page directory is installed.
 
 ## Exercise 1
 ### external linker symbol
