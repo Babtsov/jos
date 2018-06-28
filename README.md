@@ -245,6 +245,175 @@ _Assuming that the following JOS kernel code is correct, what type should variab
 ```
 since the function return_a_pointer() returns a virtual address (all pointers are virtual addresses), it should be `uintptr_t`. Then `x` will contain the integer representation of the virtual address of `value`.
 
+## Exercise 4
+The following are implementations that seem to work:  
+```C
+pte_t *
+pgdir_walk(pde_t *pgdir, const void *va, int create)
+{
+        uintptr_t addr = (uintptr_t) va;
+        pde_t pde = pgdir[PDX(addr)];
+        if (!(pde & PTE_P) && create) {
+                struct PageInfo* pd_page = page_alloc(ALLOC_ZERO);
+                if (!pd_page) {
+                        return NULL;
+                }
+                pd_page->pp_ref++;
+                pde = page2pa(pd_page) | PTE_W | PTE_P | PTE_U;
+                pgdir[PDX(addr)] = pde;
+        } else if (!(pde & PTE_P)) {
+                return NULL;
+        }
+        physaddr_t pgtable_pa = PTE_ADDR(pde);
+        pde_t *pgtable_va = KADDR(pgtable_pa);
+        return  &pgtable_va[PTX(addr)];
+}
+
+static void
+boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm)
+{
+        assert(size % PGSIZE == 0);
+        assert(pa % PGSIZE == 0);
+        assert(va % PGSIZE == 0);
+        for (int i = 0, n = size / PGSIZE; i < n; i++) {
+                pte_t *pte = pgdir_walk(pgdir,(void*) (va + i * PGSIZE), true);
+                assert(pte != NULL);
+                *pte = (pa + i * PGSIZE) | perm | PTE_P;
+        }
+}
+
+struct PageInfo *
+page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
+{
+        // Fill this function in
+        pte_t *pte = pgdir_walk(pgdir, va, false);
+        if (!pte || !(*pte & PTE_P)) {
+                return NULL;
+        }
+        if (pte_store) {
+                *pte_store = pte;
+        }
+        return pa2page(PTE_ADDR(*pte));
+}
+
+void
+page_remove(pde_t *pgdir, void *va)
+{
+        pte_t *pte_store = NULL;
+        struct PageInfo *pp = page_lookup(pgdir, va, &pte_store);
+        if (!pp) {
+                return;
+        }
+        *pte_store = 0;
+        page_decref(pp);
+        tlb_invalidate(pgdir, va);
+}
+
+int
+page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
+{
+        pte_t *pte = pgdir_walk(pgdir, va, true);
+        if (!pte) {
+                return -E_NO_MEM;
+        }
+        if (PTE_ADDR(*pte) == page2pa(pp)) {
+                if ((*pte & 0x1ff) == perm) {
+                        return 0;
+                }
+                *pte = page2pa(pp) | perm | PTE_P;
+                tlb_invalidate(pgdir, va);
+                return 0;
+        }
+        if (*pte & PTE_P) {
+                page_remove(pgdir, va);
+                assert(*pte == 0);
+        }
+        pp->pp_ref++;
+        *pte = page2pa(pp) | perm | PTE_P;
+        return 0;
+}
+```
+
+## Exercise 5
+
+code added in `mem_init`
+```C
+//////////////////////////////////////////////////////////////////////
+// Allocate an array of npages 'struct PageInfo's and store it in 'pages'.
+// The kernel uses this array to keep track of physical pages: for
+// each physical page, there is a corresponding struct PageInfo in this
+// array.  'npages' is the number of physical pages in memory.  Use memset
+// to initialize all fields of each struct PageInfo to 0.
+
+pages = (struct PageInfo *) boot_alloc(npages * sizeof(struct PageInfo));
+uintptr_t pages_region_sz = (uintptr_t)boot_alloc(0) - (uintptr_t)pages;
+memset(pages, 0, pages_region_sz);
+
+// Map 'pages' read-only by the user at linear address UPAGES
+// Permissions:
+//    - the new image at UPAGES -- kernel R, user R
+//      (ie. perm = PTE_U | PTE_P)
+//    - pages itself -- kernel RW, user NONE
+
+boot_map_region(kern_pgdir, UPAGES, PTSIZE, PADDR(pages), PTE_U);
+
+//////////////////////////////////////////////////////////////////////
+// Use the physical memory that 'bootstack' refers to as the kernel
+// stack.  The kernel stack grows down from virtual address KSTACKTOP.
+// We consider the entire range from [KSTACKTOP-PTSIZE, KSTACKTOP)
+// to be the kernel stack, but break this into two pieces:
+//     * [KSTACKTOP-KSTKSIZE, KSTACKTOP) -- backed by physical memory
+//     * [KSTACKTOP-PTSIZE, KSTACKTOP-KSTKSIZE) -- not backed; so if
+//       the kernel overflows its stack, it will fault rather than
+//       overwrite memory.  Known as a "guard page".
+//     Permissions: kernel RW, user NONE
+
+uintptr_t backed_stack = KSTACKTOP-KSTKSIZE;
+boot_map_region(kern_pgdir, backed_stack, KSTKSIZE, PADDR(bootstack), PTE_W);
+
+
+//////////////////////////////////////////////////////////////////////
+// Map all of physical memory at KERNBASE.
+// Ie.  the VA range [KERNBASE, 2^32) should map to
+//      the PA range [0, 2^32 - KERNBASE)
+// We might not have 2^32 - KERNBASE bytes of physical memory, but
+// we just set up the mapping anyway.
+// Permissions: kernel RW, user NONE
+
+uintptr_t pa_end = 0xffffffff - KERNBASE + 1;
+boot_map_region(kern_pgdir, KERNBASE, pa_end, 0, PTE_W);
+
+```
+
+### question 2
+_What entries (rows) in the page directory have been filled in at this point? What addresses do they map and where do they point? In other words, fill out this table as much as possible:_
+
+, we can do the following:
+```python
+# To calculate the base virtual address from the offset
+hex(int(math.pow(2,22))*offset)
+# to calculate the offset from a virtual address:
+address // int(math.pow(2,22))
+```
+We should have the mapping established by mem_init,
+
+
+
+Entry | Base Virtual Address  | Points to (logically):
+---|---|---
+1023|0xffc00000| Page table for top 4MB of phys memory
+...|...| page addresses holding RAM
+960|0xf0000000| the page table holding the mappings for the beginning of RAM (phyical address 0) (writable)
+959|0xefc00000| kernel stack (writable)
+958|0xef800000| unmapped
+957|0xef400000| a virtual page table at virtual address UVPT.
+956|0xef000000|  page table that contains the pages struct (which is readonly)
+955|0xeec00000|  unmapped
+...|...| unmapped
+0|0x00000000| unmapped
+
+
+
 ## random notes:
 generate gcc preprocessed file: `gcc -E pmap.c  -DJOS_KERNEL -I/home/vagrant/jos`  
 
