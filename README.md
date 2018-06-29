@@ -421,9 +421,10 @@ Because the OS maps all RAM on the last 268 MB of virtual address space, this wi
 ### Question 5
 _How much space overhead is there for managing memory, if we actually had the maximum amount of physical memory? How is this overhead broken down?_  
 
-If this question means "maximum amount of physical memory" as 4GB, then:  
-4294967296 (total RAM) / 4096 (bytes per page) = 1048576 frames.
-each frame occupies a page table entry, which is 4 bytes, so total overhead is 4194304 bytes. If we also count the page directory itself, this would be additional 1024\*4 = 4096 bytes. So total overhead is 4,198,400 bytes. This is excluding other data structures allocated by the kernel in order to manage paging.
+268435456 (max RAM) / 4096 (bytes per page) = 65536 frames. Each frame occupies a page entry which is 4 bytes, so total 262144 bytes just for page tables.
+We'd need additional 4\*1024 = 4096 bytes for page directory.
+Another overhead is the array of PageInfo structs where each struct occupies 8 bytes, and we have 1 struct per frame: 8\*65536=524288 bytes.
+So if we sum everything up, we get 262144+4096+524288 = 790528 bytes of overhead.
 
 ### Question 6
 _Revisit the page table setup in kern/entry.S and kern/entrypgdir.c. Immediately after we turn on paging, EIP is still a low number (a little over 1MB). At what point do we transition to running at an EIP above KERNBASE? What makes it possible for us to continue executing at a low EIP between when we enable paging and when we begin running at an EIP above KERNBASE? Why is this transition necessary?_  
