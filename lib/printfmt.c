@@ -124,7 +124,7 @@ static enum pcolor decode_color(int* sz, const char *str) {
 	return INVALID;
 }
 
-extern enum pcolor ccolor;
+//extern enum pcolor ccolor;
 
 void
 vprintfmt(void (*putch)(int, void*), void *putdat, const char *fmt, va_list ap)
@@ -146,7 +146,7 @@ vprintfmt(void (*putch)(int, void*), void *putdat, const char *fmt, va_list ap)
 			int offset = 0;
 			enum pcolor c = decode_color(&offset, fmt);
 			if (c != INVALID) {
-				ccolor = c;
+//				ccolor = c;
 				fmt += offset;
 			} else {
 				putch(ch, putdat);
