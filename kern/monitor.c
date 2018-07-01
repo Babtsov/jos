@@ -16,6 +16,20 @@
 
 #define CMDBUF_SIZE	80	// enough for one VGA text line
 
+void
+print_pfields(pte_t pte)
+{
+	if (pte & PTE_G) cprintf("PTE_G ");
+	if (pte & PTE_PS) cprintf("PTE_PS ");
+	if (pte & PTE_D) cprintf("PTE_D ");
+	if (pte & PTE_A) cprintf("PTE_A ");
+	if (pte & PTE_PCD) cprintf("PTE_PCD ");
+	if (pte & PTE_PWT) cprintf("PTE_PWT ");
+	if (pte & PTE_U) cprintf("PTE_U ");
+	if (pte & PTE_W) cprintf("PTE_W ");
+	if (pte & PTE_P) cprintf("PTE_P ");
+}
+
 
 struct Command {
 	const char *name;
@@ -30,7 +44,8 @@ static struct Command commands[] = {
 	{ "kerninfo", "Display information about the kernel", mon_kerninfo },
 	{ "backtrace", "Display stack trace", mon_backtrace },
 	{ "vaddrinfo", "Display information about virtual address", mon_vaddrinfo },
-	{ "pgdir", "Display the contents of a page directory or a page table", mon_pgdir }
+	{ "pgdir", "Display the contents of a page directory or a page table", mon_pgdir },
+	{ "vminfo", "Display a summary of all the virtual address space", mon_vminfo }
 };
 
 /***** Implementations of basic kernel monitor commands *****/
@@ -120,10 +135,7 @@ print_pagetable_entry(pte_t *pte_table, int offset)
 		cprintf("NONE\n");
 		return;
 	}
-	if (pte & PTE_P) cprintf("PTE_P ");
-	if (pte & PTE_W) cprintf("PTE_W ");
-	if (pte & PTE_U) cprintf("PTE_U ");
-
+	print_pfields(pte);
 	cprintf("\n");
 }
 
@@ -188,24 +200,109 @@ mon_pgdir(int argc, char **argv, struct Trapframe *tf)
 		return 0;
 	}
 
-	uint16_t begin, end;
-	if (argc == 2) {
-		begin = 0;
-		end = NPTENTRIES - 1;
-	} else if (argc == 3) {
-		begin = end = (uint16_t) strtol(argv[2], NULL, 16);
-	} else if (argc == 4) {
-		begin = (uint16_t) strtol(argv[2], NULL, 16);
-		end = (uint16_t) strtol(argv[3], NULL, 16);
-	}
-	if (begin > end || end >= NPTENTRIES) {
-		cprintf("invalid offset(s): begin should be <= end, and\n");
-		cprintf("offset(s) should be between 0 and %x\n", NPTENTRIES - 1);
+	if (argc == 4) { // handle pgdir <address> <begin offset> <end offset>
+		uint16_t begin = (uint16_t) strtol(argv[2], NULL, 16);
+		uint16_t end = (uint16_t) strtol(argv[3], NULL, 16);
+		if (begin > end || end >= NPTENTRIES) {
+			cprintf("invalid offset(s): begin should be <= end, and\n");
+			cprintf("offset(s) should be between 0 and %x\n", NPTENTRIES - 1);
+			return 0;
+		}
+		for (int i = begin; i <= end; i++) {
+			print_pagetable_entry((pte_t *)address, i);
+		}
+		return 0;
+	} else if (argc == 3) { // handle pgdir <address> <offset>
+		uint16_t offset = (uint16_t) strtol(argv[2], NULL, 16);
+		if (offset >= NPTENTRIES) {
+			cprintf("invalid offset: %x", offset);
+			return 0;
+		}
+		print_pagetable_entry((pte_t *)address, offset);
 		return 0;
 	}
-	for (int i = begin; i <= end; i++) {
-		print_pagetable_entry((pte_t *)address, i);
+	// handle pgdir <address>
+
+	int empty_pte = 0;
+	pte_t * pgtable =  (pte_t *)address;
+	cprintf("All occupied entries:\n");
+	for (int i = 0; i < NPTENTRIES; i++) {
+		pte_t pte = pgtable[i];
+		if (pte & PTE_P) {
+			print_pagetable_entry(pgtable, i);
+		} else {
+			empty_pte++;
+		}
 	}
+	cprintf("Empty entries count: %d\n", empty_pte);
+	cprintf("Occupied entries count: %d\n", NPTENTRIES - empty_pte);
+
+	cprintf("Ranges for free/occupied regions:\n");
+	bool prev_occupied = (pgtable[0] & PTE_P) ? true : false;
+	int prev = 0;
+	for (int i =  1; i < NPTENTRIES; i++) {
+		bool current_occuptied = (pgtable[i] & PTE_P) ? true : false;
+		if (current_occuptied != prev_occupied) {
+			const char *status = prev_occupied ? "occupied" : "free";
+			cprintf("[%03x .. %03x] %s\n", prev, i - 1, status);
+			prev_occupied = current_occuptied;
+			prev = i;
+		}
+	}
+	cprintf("[%03x .. %03x] %s\n", prev, NPTENTRIES - 1, prev_occupied ? "occupied" : "free");
+	return 0;
+}
+
+int
+mon_vminfo(int argc, char **argv, struct Trapframe *tf)
+{
+	if ( argc > 2) {
+		cprintf("usage: vminfo [<pgdir address>]\n");
+		return 0;
+	}
+
+	pde_t *pgdir = KADDR(rcr3());
+	if (argc == 2) {
+		uintptr_t address;
+		if (extract_hex_addr(&address, argv[1]) < 0) {
+			cprintf("invalid address entered: %s\n", argv[1]);
+			return 0;
+		}
+		pgdir = (pde_t *)address;
+	}
+	cprintf("Using pgdir at: %08x\n", pgdir);
+
+	uintptr_t unmapped_page_count = 0;
+	int prev_pfields = 0;
+	const uint64_t one = 1;
+	for (uint64_t i = 0, prev = 0; i < (one << 32); i += PGSIZE) {
+		uintptr_t addr = i, prev_addr = prev;
+		pte_t *pte =  pgdir_walk(pgdir, (const void *)addr, false);
+		int pfields = pte ? (*pte & 0x7) : 0;
+
+		if (i == 0) {
+			prev_pfields = pfields;
+		} else if ( i == (one << 32) - PGSIZE) {
+			i = (one << 32);
+			pfields = ~prev_pfields;
+		}
+		if (prev_pfields == pfields) {
+			continue;
+		}
+
+		uintptr_t page_count = (addr - PGSIZE - prev_addr)/PGSIZE + 1;
+		cprintf("[ %08x .. %08x] %07d ", prev_addr, addr - PGSIZE, page_count);
+		if (prev_pfields == 0) {
+			cprintf("<UNMAPPED>\n");
+			unmapped_page_count += page_count;
+		} else {
+			print_pfields(prev_pfields);
+			cprintf("\n");
+		}
+		prev = i;
+		prev_pfields = pfields;
+	}
+	cprintf("Unmapped page count %d\n", unmapped_page_count);
 	return 0;
 }
 
