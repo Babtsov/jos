@@ -1,5 +1,42 @@
 # Lab 3 notes
 lab link: https://pdos.csail.mit.edu/6.828/2017/labs/lab3/  
+## ELF slightly more in depth
+The ELF format has been encountered as part of the bootloader. The bootloader had to parse the kernel (which is an ELF executabe) in order to load it to memory.
+### Useful ELF links:
+https://medium.com/@MrJamesFisher/understanding-the-elf-4bd60daac571  
+https://linux-audit.com/elf-binaries-on-linux-understanding-and-analysis/#the-anatomy-of-an-elf-file  
+https://en.wikipedia.org/wiki/Executable_and_Linkable_Format    
+### anatomy of an ELF file
+ELF contains program-headers (AKA program segments) and program sections. Program-headers are the ones useful for loading. Program sections are using for linking and debugging.
+```bash
+# read the program haaders (can also use the --segments flag)
+readelf --program-headers hello
+# read the program sections (can also use the --sections flag)
+readelf --section-headers hello
+```
+
+### example of actual contents
+```bash
+vagrant@vagrant-ubuntu-trusty-32:~/jos$ readelf --program-headers obj/user/hello
+
+Elf file type is EXEC (Executable file)
+Entry point 0x800020
+There are 4 program headers, starting at offset 52
+
+Program Headers:
+  Type           Offset   VirtAddr   PhysAddr   FileSiz MemSiz  Flg Align
+  LOAD           0x001000 0x00200000 0x00200000 0x043af 0x043af RW  0x1000
+  LOAD           0x006020 0x00800020 0x00800020 0x0160d 0x0160d R E 0x1000
+  LOAD           0x008000 0x00802000 0x00802000 0x00004 0x00008 RW  0x1000
+  GNU_STACK      0x000000 0x00000000 0x00000000 0x00000 0x00000 RWE 0x10
+
+ Section to Segment mapping:
+  Segment Sections...
+   00     .stab_info .stab .stabstr
+   01     .text .rodata
+   02     .data .bss
+   03
+```
 
 ### Memory map
 ```
