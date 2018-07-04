@@ -33,11 +33,11 @@ i386_init(void)
 	// Lab 2 memory management initialization functions
 	mem_init();
 
-
+//	monitor(NULL);
 	// Lab 3 user environment initialization functions
 	env_init();
 	trap_init();
-
+	cprintf("env and trap are initialized\n");
 #if defined(TEST)
 	// Don't touch -- used by grading script!
 	ENV_CREATE(TEST, ENV_TYPE_USER);
@@ -46,7 +46,7 @@ i386_init(void)
 	ENV_CREATE(user_hello, ENV_TYPE_USER);
 #endif // TEST*
 
-	env_alloc(NULL, 0);
+//	env_alloc(NULL, 0);
 
 	// We only have one user environment for now, so just run it.
 	env_run(&envs[0]);
