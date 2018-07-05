@@ -1,5 +1,7 @@
 # Lab 3 notes
 lab link: https://pdos.csail.mit.edu/6.828/2017/labs/lab3/  
+x86 rings, Privilege, and protection: https://manybutfinite.com/post/cpu-rings-privilege-and-protection/  
+
 ## ELF slightly more in depth
 The ELF format has been encountered as part of the bootloader. The bootloader had to parse the kernel (which is an ELF executabe) in order to load it to memory.
 ### Useful ELF links:
