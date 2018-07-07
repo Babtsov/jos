@@ -102,6 +102,18 @@ gs             0x23     35
 We see that looks like all registers match exactly except eip. but this makes sense because the trap frame will contain the instruction after int $0x30, which according to hello.asm is indeed equal to 800f6b, which is the value pushed to the trap frame.
 ```
 
+## Exercise 4
+### Questions
+_What is the purpose of having an individual handler function for each exception/interrupt? (i.e., if all exceptions/interrupts were delivered to the same handler, what feature that exists in the current implementation could not be provided?)_  
+
+If we had just one handler for all the exceptions/interrupts, we wouldn't be able to know which exception/interrupt occured because the x86 hardware is not pushing the vector of the interrupt/exception that has triggered the handler to run.
+
+_Did you have to do anything to make the user/softint program behave correctly? The grade script expects it to produce a general protection fault (trap 13), but softint's code says int $14. Why should this produce interrupt vector 13? What happens if the kernel actually allows softint's int $14 instruction to invoke the kernel's page fault handler (which is interrupt vector 14)?_  
+
+The user-space program is not supposed to be able to trigger trap 14 (page fault). We explicitly forbid the user to trigger these CPU-generated interrupts aritificially (using the `int` instruction) by setting dpl to 0 at the interrupt gate. This means that if the user space program artificially issues an interrupt that it is not authorized to, a protection fault will be generated instead (trap 13). 
+If the kernel actually allows this interrupt to be triggered by the user space program, the page fault handler would have run. However, a potentially invalid value might be stored in cr2 (the virtual address which caused the fault), and depending on how the page fault handler is implemented, this can potentially cause allocation of pages that the user process is not otherwise authorized to do, or some other unintended kernel bugs that can compromise the security or the stablity of the system.
+
+
 ### Memory map
 ```
 /*
