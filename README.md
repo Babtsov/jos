@@ -42,9 +42,33 @@ Program Headers:
 
 ## Going from Kernel to user space and back
 The control reaches user space once env_pop_tf is executed (and more specifically when the `iret` instruction is reached).
-Then once the execution is inside the user program, the control transfers back to the kernel once a system call is made. If we look at the "hello" binary, we can see the disassembly of the `syscall` function where is the last instruction executed before going back to the kernel space:
+Then once the execution is inside the user program, the control transfers back to the kernel once a system call is made. If we look at the "hello" binary (see `hello.c`), we can see the disassembly of the `syscall` function where is the last instruction executed before going back to the kernel space:
 ```
 800f69:       cd 30                   int    $0x30
+```
+Once the control is back in the kernel space, we push all of the user's registers into the the kernel into what is called "trap frame". We do it so we can later resume the the user process from where it was paused.
+To illustrate what the trap frame structure contains:  
+This is what the trap frame we get the first time a system call is called in the "hello" binary:
+```
+TRAP frame at 0xefffffc0
+  edi  0x00000000
+  esi  0x00000000
+  ebp  0xeebfde20
+  oesp 0xefffffe0
+  ebx  0x00000000
+  edx  0xeebfde78
+  ecx  0x0000000d
+  eax  0x00000000
+  es   0x----0023
+  ds   0x----0023
+  trap 0x00000030 System call
+  err  0x00800f6b
+  eip  0x0000001b
+  cs   0x----0096
+  flag 0xeebfddd8
+  esp  0x00000023
+  ss   0x----ff53
+
 ```
 
 ### Memory map
