@@ -43,8 +43,8 @@ Program Headers:
 ```
 
 ## Going from Kernel to user space and back
-The control reaches user space once env_pop_tf is executed (and more specifically when the `iret` instruction is reached).
-Then once the execution is inside the user program, the control transfers back to the kernel once a system call is made. If we look at the "hello" binary (compiled version of `hello.c`), we can see the disassembly of the `syscall` function where is the last instruction executed before going back to the kernel space is the `int 0$30` instruction:
+The control reaches user space once env_pop_tf is executed (and more specifically when the `iret` instruction is reached).  
+Then once the execution is inside the user program, the control transfers back to the kernel once a system call is made. If we look at the "hello" binary (compiled version of `hello.c`), we can see the disassembly of the `syscall` function where is the last instruction executed before going back to the kernel space. This instruction is `int 0$30` as we can see from:
 ```
   800f69:       cd 30                   int    $0x30
   800f6b:       89 45 e4                mov    %eax,-0x1c(%ebp)
@@ -71,10 +71,10 @@ TRAP frame at 0xefffffbc
   flag 0x00000096
   esp  0xeebfddd8
   ss   0x----0023
-
-# now let's confirm these values with gdb.
-# we set a breakpoint right before the processor switches back to the kernel (at "int $0x30")
-
+```
+now let's confirm these values with gdb.  
+we set a breakpoint right before the processor switches back to the kernel (at "int $0x30")  
+```
 (gdb) b *0x800f69
 Breakpoint 1 at 0x800f69
 (gdb) c
@@ -98,9 +98,9 @@ ds             0x23     35
 es             0x23     35
 fs             0x23     35
 gs             0x23     35
-
-We see that looks like all registers match exactly except eip. but this makes sense because the trap frame will contain the instruction after int $0x30, which according to hello.asm is indeed equal to 800f6b, which is the value pushed to the trap frame.
 ```
+We see that looks like all registers match exactly except eip. but this makes sense because the trap frame will contain the instruction after int $0x30, which according to hello.asm is indeed equal to 800f6b, which is the value pushed to the trap frame.
+
 
 ## Exercise 4
 ### Questions
