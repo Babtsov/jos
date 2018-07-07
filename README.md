@@ -40,6 +40,13 @@ Program Headers:
    03
 ```
 
+## Going from Kernel to user space and back
+The control reaches user space once env_pop_tf is executed (and more specifically when the `iret` instruction is reached).
+Then once the execution is inside the user program, the control transfers back to the kernel once a system call is made. If we look at the "hello" binary, we can see the disassembly of the `syscall` function where is the last instruction executed before going back to the kernel space:
+```
+800f69:       cd 30                   int    $0x30
+```
+
 ### Memory map
 ```
 /*
