@@ -42,6 +42,44 @@ Program Headers:
    03
 ```
 
+### loading user space ELF executable into memory
+As previously mentioned, when we load an ELF file, we are interested in the program headers. We will basically iterate through them, and reserve as much memory as each section demands (the `MemSiz` column). We will copy over `FileSiz` bytes from the ELF data into the memory we reseved, and the rest of the memory (`MemSiz`-`FileSiz`) will be cleared (set to 0).  
+```C
+static void
+load_icode(struct Env *e, uint8_t *binary)
+{
+        struct Elf *elf = (struct Elf *)binary;
+        if (elf->e_magic != ELF_MAGIC) {
+                panic("invalid ELF file\n");
+        }
+
+        //switch to the pgdir so we can write to the allocated memory
+        lcr3(PADDR(e->env_pgdir));
+
+        struct Proghdr *header = (struct Proghdr *)(binary + elf->e_phoff);
+        struct Proghdr *end = header + elf->e_phnum;
+        for (; header < end; header++) {
+                if (header->p_type != ELF_PROG_LOAD) {
+                        continue;
+                }
+                region_alloc(e, (void *)header->p_va, header->p_memsz);
+                memset((void*)header->p_va, 0, header->p_memsz);
+                void *foffset = (void *)(binary + header->p_offset);
+                memcpy((void *)header->p_va, foffset, header->p_filesz);
+        }
+
+        // Now map one page for the program's initial stack
+        region_alloc(e, (void *)(USTACKTOP - PGSIZE), PGSIZE);
+        memset((void *)(USTACKTOP - PGSIZE), 0, PGSIZE);
+
+        // switch back to kern_pgdir to be on the safe side
+        lcr3(PADDR(kern_pgdir));
+
+        e->env_tf.tf_eip = elf->e_entry;
+}
+```
+
+
 ## Going from Kernel to user space and back
 The control reaches user space once env_pop_tf is executed (and more specifically when the `iret` instruction is reached).  
 Then once the execution is inside the user program, the control transfers back to the kernel once a system call is made. If we look at the "hello" binary (compiled version of `hello.c`), we can see the disassembly of the `syscall` function where is the last instruction executed before going back to the kernel space. This instruction is `int 0$30` as we can see from:
