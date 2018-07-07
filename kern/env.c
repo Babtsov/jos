@@ -346,14 +346,16 @@ load_icode(struct Env *e, uint8_t *binary)
 	//  You must also do something with the program's entry point,
 	//  to make sure that the environment starts executing there.
 	//  What?  (See env_run() and env_pop_tf() below.)
-
 	// LAB 3: Your code here.
 	
 	struct Elf *elf = (struct Elf *)binary;
 	if (elf->e_magic != ELF_MAGIC) {
 		panic("invalid ELF file\n");
 	}
+
+	//switch to the pgdir so we can write to the allocated memory
 	lcr3(PADDR(e->env_pgdir));
+
 	struct Proghdr *header = (struct Proghdr *)(binary + elf->e_phoff);
 	struct Proghdr *end = header + elf->e_phnum;
 	for (; header < end; header++) {
@@ -367,11 +369,12 @@ load_icode(struct Env *e, uint8_t *binary)
 	}
 
 	// Now map one page for the program's initial stack
-	// at virtual address USTACKTOP - PGSIZE.
 	region_alloc(e, (void *)(USTACKTOP - PGSIZE), PGSIZE);
 	memset((void *)(USTACKTOP - PGSIZE), 0, PGSIZE);
+
+	// switch back to kern_pgdir to be on the safe side
 	lcr3(PADDR(kern_pgdir));
-	e->env_tf.tf_esp = USTACKTOP;
+
 	e->env_tf.tf_eip = elf->e_entry;
 }
 

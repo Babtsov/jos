@@ -25,6 +25,7 @@ struct Pseudodesc idt_pd = {
 	sizeof(idt) - 1, (uint32_t) idt
 };
 
+extern struct Segdesc gdt[];
 
 static const char *trapname(int trapno)
 {
@@ -58,13 +59,53 @@ static const char *trapname(int trapno)
 	return "(unknown trap)";
 }
 
+/*
+This marco is convinience to populate the idt similar to
+the following code snippet:
+
+struct Gatedesc __g;
+SETGATE(__g, true, GD_KT, t_syscall,3);
+idt[48] = g;
+
+*/
+
+#define POPULATE_IDT_ENTRY(idt, idx, istrap, fn, dpl)	\
+{           						\
+	struct Gatedesc __g;			        \
+	SETGATE(__g, istrap, GD_KT, fn,dpl);		\
+	idt[idx] = __g;					\
+}	           					\
 
 void
 trap_init(void)
 {
-	extern struct Segdesc gdt[];
-
 	// LAB 3: Your code here.
+
+	/* awk script to generate the entries automatically:
+
+	awk '{print "POPULATE_IDT_ENTRY(idt, " $2 ", true, " tolower($2) ", 0);"}'
+	*/
+
+	POPULATE_IDT_ENTRY(idt, T_DIVIDE, true, t_divide, 0);
+	POPULATE_IDT_ENTRY(idt, T_DEBUG, true, t_debug, 0);
+	POPULATE_IDT_ENTRY(idt, T_NMI, true, t_nmi, 0);
+	POPULATE_IDT_ENTRY(idt, T_BRKPT, true, t_brkpt, 0);
+	POPULATE_IDT_ENTRY(idt, T_OFLOW, true, t_oflow, 0);
+	POPULATE_IDT_ENTRY(idt, T_BOUND, true, t_bound, 0);
+	POPULATE_IDT_ENTRY(idt, T_ILLOP, true, t_illop, 0);
+	POPULATE_IDT_ENTRY(idt, T_DEVICE, true, t_device, 0);
+	POPULATE_IDT_ENTRY(idt, T_DBLFLT, true, t_dblflt, 0);
+	POPULATE_IDT_ENTRY(idt, T_TSS, true, t_tss, 0);
+	POPULATE_IDT_ENTRY(idt, T_SEGNP, true, t_segnp, 0);
+	POPULATE_IDT_ENTRY(idt, T_STACK, true, t_stack, 0);
+	POPULATE_IDT_ENTRY(idt, T_GPFLT, true, t_gpflt, 0);
+	POPULATE_IDT_ENTRY(idt, T_PGFLT, true, t_pgflt, 0);
+	POPULATE_IDT_ENTRY(idt, T_FPERR, true, t_fperr, 0);
+	POPULATE_IDT_ENTRY(idt, T_ALIGN, true, t_align, 0);
+	POPULATE_IDT_ENTRY(idt, T_MCHK, true, t_mchk, 0);
+	POPULATE_IDT_ENTRY(idt, T_SIMDERR, true, t_simderr, 0);
+	
+	POPULATE_IDT_ENTRY(idt, T_SYSCALL, true, t_syscall, 3);
 
 	// Per-CPU setup 
 	trap_init_percpu();
