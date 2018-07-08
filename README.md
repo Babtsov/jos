@@ -79,10 +79,14 @@ load_icode(struct Env *e, uint8_t *binary)
 }
 ```
 
-
 ## Going from Kernel to user space and back
-The control reaches user space once env_pop_tf is executed (and more specifically when the `iret` instruction is reached).  
-Then once the execution is inside the user program, the control transfers back to the kernel once a system call is made. If we look at the "hello" binary (compiled version of `hello.c`), we can see the disassembly of the `syscall` function where is the last instruction executed before going back to the kernel space. This instruction is `int 0$30` as we can see from:
+After we boot the processor, we are by default in the kernel space and we'll need to switch to user space in order to run our first "user program (environment). The control reaches user space once `env_pop_tf` is executed (and more specifically when the `iret` instruction is reached).  
+
+### starting the first environment (process)
+Each environment is storing the state of the CPU in a "trap frame". This trap frame is how we can suspend environments in order to do something in the kernel (such as handle an interrupt), and then later on resume them from exactly the same point from which they have been suspended. This results in an enviornment not even being "aware" that it has been suspended (we need to ensure that the state of the CPU is exactly restored to what it was).
+The first step in creating the environment is happening by invoking the `env_create` function. This function calls `env_alloc` which allocate the page directory, and sets up segment registers as well as setting the stack pointer. Then it calls `load_icode` which sets up the virtual memory (as previously discussed), and also stores the address of the first instruction in the environment's trap frame. now our trap frame has already been initialized and is ready for the environment to start running. `env_run` will switch to the page directory of the new enviornment and will execute the `env_pop_tf` function.
+
+Once the execution is inside the user program, the control transfers back to the kernel once a system call is made. If we look at the "hello" binary (compiled version of `hello.c`), we can see the disassembly of the `syscall` function where is the last instruction executed before going back to the kernel space. This instruction is `int 0$30` as we can see from:
 ```
   800f69:       cd 30                   int    $0x30
   800f6b:       89 45 e4                mov    %eax,-0x1c(%ebp)
