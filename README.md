@@ -151,6 +151,16 @@ _Did you have to do anything to make the user/softint program behave correctly? 
 The user-space program is not supposed to be able to trigger trap 14 (page fault). We explicitly forbid the user to trigger these CPU-generated interrupts aritificially (using the `int` instruction) by setting dpl to 0 at the interrupt gate. This means that if the user space program artificially issues an interrupt that it is not authorized to, a protection fault will be generated instead (trap 13). 
 If the kernel actually allows this interrupt to be triggered by the user space program, the page fault handler would have run. However, a potentially invalid value might be stored in cr2 (the virtual address which caused the fault), and depending on how the page fault handler is implemented, this can potentially cause allocation of pages that the user process is not otherwise authorized to do, or some other unintended kernel bugs that can compromise the security or the stablity of the system.
 
+## Exercise 6
+### Questions
+_The break point test case will either generate a break point exception or a general protection fault depending on how you initialized the break point entry in the IDT (i.e., your call to SETGATE from trap_init). Why? How do you need to set it up in order to get the breakpoint exception to work as specified above and what incorrect setup would cause it to trigger a general protection fault?_  
+
+The break point gate in the IDT (which is set by the SETGATE macro) contains a dpl (Descriptor Privilege Level) field. This field controls what is the least privilaged level that can envoke this interrupt by software. We need to set it to 3 in order to allow it to be envoked by the user space program. having it set to 0 will cause a general protection fault if we attempt to envoke it in software (by issuing the `int 3` instruction).  Therefore, the right way to initialize the gate is through: `SETGATE(idt[T_BRKPT], true, GD_KT,t_brkpt, 3);`  
+
+_What do you think is the point of these mechanisms, particularly in light of what the user/softint test program does?_  
+The point of these mechanism is to prevent the user from triggering the kernel from executing interrupt handlers that are meant to be executed only for truly exceptional situations. As mentioned, this can protect the kernel from malicious/buggy programs.
+
+
 
 ### Memory map
 ```
