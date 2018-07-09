@@ -59,22 +59,6 @@ static const char *trapname(int trapno)
 	return "(unknown trap)";
 }
 
-/*
-This marco is convinience to populate the idt similar to
-the following code snippet:
-
-struct Gatedesc __g;
-SETGATE(__g, true, GD_KT, t_syscall,3);
-idt[48] = g;
-
-*/
-
-#define POPULATE_IDT_ENTRY(idt, idx, istrap, fn, dpl)	\
-{           						\
-	struct Gatedesc __g;			        \
-	SETGATE(__g, istrap, GD_KT, fn,dpl);		\
-	idt[idx] = __g;					\
-}	           					\
 
 void
 trap_init(void)
@@ -82,30 +66,31 @@ trap_init(void)
 	// LAB 3: Your code here.
 
 	/* awk script to generate the entries automatically:
+	   awk '{print "SETGATE(idt[" $2 "], true, GD_KT," tolower($2) ", 0);"}'
 
-	awk '{print "POPULATE_IDT_ENTRY(idt, " $2 ", true, " tolower($2) ", 0);"}'
+	   see https://wiki.osdev.org/Exceptions to help decide which one of these
+	   should be set istrap=false
 	*/
-
-	POPULATE_IDT_ENTRY(idt, T_DIVIDE, true, t_divide, 0);
-	POPULATE_IDT_ENTRY(idt, T_DEBUG, true, t_debug, 0);
-	POPULATE_IDT_ENTRY(idt, T_NMI, true, t_nmi, 0);
-	POPULATE_IDT_ENTRY(idt, T_BRKPT, true, t_brkpt, 0);
-	POPULATE_IDT_ENTRY(idt, T_OFLOW, true, t_oflow, 0);
-	POPULATE_IDT_ENTRY(idt, T_BOUND, true, t_bound, 0);
-	POPULATE_IDT_ENTRY(idt, T_ILLOP, true, t_illop, 0);
-	POPULATE_IDT_ENTRY(idt, T_DEVICE, true, t_device, 0);
-	POPULATE_IDT_ENTRY(idt, T_DBLFLT, true, t_dblflt, 0);
-	POPULATE_IDT_ENTRY(idt, T_TSS, true, t_tss, 0);
-	POPULATE_IDT_ENTRY(idt, T_SEGNP, true, t_segnp, 0);
-	POPULATE_IDT_ENTRY(idt, T_STACK, true, t_stack, 0);
-	POPULATE_IDT_ENTRY(idt, T_GPFLT, true, t_gpflt, 0);
-	POPULATE_IDT_ENTRY(idt, T_PGFLT, true, t_pgflt, 0);
-	POPULATE_IDT_ENTRY(idt, T_FPERR, true, t_fperr, 0);
-	POPULATE_IDT_ENTRY(idt, T_ALIGN, true, t_align, 0);
-	POPULATE_IDT_ENTRY(idt, T_MCHK, true, t_mchk, 0);
-	POPULATE_IDT_ENTRY(idt, T_SIMDERR, true, t_simderr, 0);
+	SETGATE(idt[T_DIVIDE], true, GD_KT,t_divide, 0);
+	SETGATE(idt[T_DEBUG], true, GD_KT,t_debug, 0);
+	SETGATE(idt[T_NMI], false, GD_KT,t_nmi, 0);
+	SETGATE(idt[T_BRKPT], true, GD_KT,t_brkpt, 3);
+	SETGATE(idt[T_OFLOW], true, GD_KT,t_oflow, 0);
+	SETGATE(idt[T_BOUND], true, GD_KT,t_bound, 0);
+	SETGATE(idt[T_ILLOP], true, GD_KT,t_illop, 0);
+	SETGATE(idt[T_DEVICE], true, GD_KT,t_device, 0);
+	SETGATE(idt[T_DBLFLT], false, GD_KT,t_dblflt, 0);
+	SETGATE(idt[T_TSS], true, GD_KT,t_tss, 0);
+	SETGATE(idt[T_SEGNP], true, GD_KT,t_segnp, 0);
+	SETGATE(idt[T_STACK], true, GD_KT,t_stack, 0);
+	SETGATE(idt[T_GPFLT], true, GD_KT,t_gpflt, 0);
+	SETGATE(idt[T_PGFLT], true, GD_KT,t_pgflt, 0);
+	SETGATE(idt[T_FPERR], true, GD_KT,t_fperr, 0);
+	SETGATE(idt[T_ALIGN], true, GD_KT,t_align, 0);
+	SETGATE(idt[T_MCHK], false, GD_KT,t_mchk, 0);
+	SETGATE(idt[T_SIMDERR], true, GD_KT,t_simderr, 0);
 	
-	POPULATE_IDT_ENTRY(idt, T_SYSCALL, true, t_syscall, 3);
+	SETGATE(idt[T_SYSCALL], true, GD_KT, t_syscall, 3);
 
 	// Per-CPU setup 
 	trap_init_percpu();
@@ -185,7 +170,24 @@ trap_dispatch(struct Trapframe *tf)
 {
 	// Handle processor exceptions.
 	// LAB 3: Your code here.
-
+	if (tf->tf_trapno == T_PGFLT) {
+		page_fault_handler(tf);
+		return;
+	} else if (tf->tf_trapno == T_BRKPT) {
+		monitor(tf);
+		return;
+	} else if (tf->tf_trapno == T_SYSCALL) {
+		struct PushRegs *regs = &curenv->env_tf.tf_regs;
+		cprintf("syscall dispatched! %d \n", regs->reg_eax);
+		int32_t result = syscall(regs->reg_eax,
+					 regs->reg_edx,
+					 regs->reg_ecx,
+					 regs->reg_ebx,
+					 regs->reg_edi,
+					 regs->reg_esi);
+		regs->reg_eax = result;
+		return;
+	}
 	// Unexpected trap: The user process or the kernel has a bug.
 	print_trapframe(tf);
 	if (tf->tf_cs == GD_KT)

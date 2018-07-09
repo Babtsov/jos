@@ -29,7 +29,6 @@ i386_init(void)
 	cprintf(KRED "judge " KGRN "me\n");
 	cprintf("free " KNRM "like " KBLU "nobody\n" KNRM);
 	cprintf("6828 decimal is %o octal!\n", 6828);
-
 	// Lab 2 memory management initialization functions
 	mem_init();
 

@@ -80,10 +80,8 @@
  * Lab 3: Your code here for _alltraps
  */
 _alltraps:
-	pushw $0
-	pushw %ds
-	pushw $0
-	pushw %es
+	pushl %ds
+	pushl %es
 	pushal
 	movw $GD_KD, %ax
 	movw %ax, %ds
