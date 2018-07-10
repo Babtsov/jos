@@ -164,7 +164,28 @@ The break point gate in the IDT (which is set by the SETGATE macro) contains a d
 _What do you think is the point of these mechanisms, particularly in light of what the user/softint test program does?_  
 The point of these mechanism is to prevent the user from triggering the kernel from executing interrupt handlers that are meant to be executed only for truly exceptional situations. As mentioned, this can protect the kernel from malicious/buggy programs.
 
-
+## Exercise 9
+Running the `user/breakpoint` binary and then using the "backtrace" kernel monitor command, we get the following:  
+```
+K> backtrace
+Stack backtrace:
+ebp effffe90 eip f01016ef args 00000001  effffeb0  f01d3000  0000000d  f0109398
+             kern/monitor.c:347: runcmd+306
+ebp efffff00 eip f010176d args f0191429  f01d3000  efffff30  00000000  f011ef48
+             kern/monitor.c:367: monitor+86
+ebp efffff30 eip f0105cfb args f01d3000  00000000  00000000  00000000  00000000
+             kern/trap.c:178: trap_dispatch+58
+ebp efffff80 eip f0105e81 args f01d3000  efffffbc  f015cb35  f0154be9  f0154b35
+             kern/trap.c:235: trap+193
+ebp efffffb0 eip f0105fcc args f01d3000  00000000  00000000  eebfdfc0  efffffdc
+             kern/syscall.c:19: sys_cputs+0
+ebp eebfdfc0 eip 00800086 args 00000000  00000000  00000000  00000000  00000000
+             lib/libmain.c:27: libmain+77
+ebp eebfdff0 eip 00800031 args 00000000  00000000 Incoming TRAP frame at 0xeffffe0c
+kernel panic at kern/trap.c:252: kernel page fault at: eebfe000
+Welcome to the JOS kernel monitor!
+```
+Notice that `0xeebfe000` is actually the value of USTACKTOP! basically the reason why we get a page fault is because we reached the top of the user stack (beyond which, there are no pages mapped). The value of `0xeffffe0c` is associated with the kernel stack (in which the trapframes are stored).  
 
 ### Memory map
 ```
