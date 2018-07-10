@@ -30,6 +30,7 @@ struct Pseudodesc idt_pd = {
 	sizeof(idt) - 1, (uint32_t) idt
 };
 
+extern struct Segdesc gdt[];
 
 static const char *trapname(int trapno)
 {
@@ -69,9 +70,34 @@ static const char *trapname(int trapno)
 void
 trap_init(void)
 {
-	extern struct Segdesc gdt[];
-
 	// LAB 3: Your code here.
+
+	/* awk script to generate the entries automatically:
+	   awk '{print "SETGATE(idt[" $2 "], true, GD_KT," tolower($2) ", 0);"}'
+
+	   see https://wiki.osdev.org/Exceptions to help decide which one of these
+	   should be set istrap=false
+	*/
+	SETGATE(idt[T_DIVIDE], true, GD_KT,t_divide, 0);
+	SETGATE(idt[T_DEBUG], true, GD_KT,t_debug, 0);
+	SETGATE(idt[T_NMI], false, GD_KT,t_nmi, 0);
+	SETGATE(idt[T_BRKPT], true, GD_KT,t_brkpt, 3);
+	SETGATE(idt[T_OFLOW], true, GD_KT,t_oflow, 0);
+	SETGATE(idt[T_BOUND], true, GD_KT,t_bound, 0);
+	SETGATE(idt[T_ILLOP], true, GD_KT,t_illop, 0);
+	SETGATE(idt[T_DEVICE], true, GD_KT,t_device, 0);
+	SETGATE(idt[T_DBLFLT], false, GD_KT,t_dblflt, 0);
+	SETGATE(idt[T_TSS], true, GD_KT,t_tss, 0);
+	SETGATE(idt[T_SEGNP], true, GD_KT,t_segnp, 0);
+	SETGATE(idt[T_STACK], true, GD_KT,t_stack, 0);
+	SETGATE(idt[T_GPFLT], true, GD_KT,t_gpflt, 0);
+	SETGATE(idt[T_PGFLT], true, GD_KT,t_pgflt, 0);
+	SETGATE(idt[T_FPERR], true, GD_KT,t_fperr, 0);
+	SETGATE(idt[T_ALIGN], true, GD_KT,t_align, 0);
+	SETGATE(idt[T_MCHK], false, GD_KT,t_mchk, 0);
+	SETGATE(idt[T_SIMDERR], true, GD_KT,t_simderr, 0);
+	
+	SETGATE(idt[T_SYSCALL], true, GD_KT, t_syscall, 3);
 
 	// Per-CPU setup 
 	trap_init_percpu();
@@ -176,6 +202,24 @@ trap_dispatch(struct Trapframe *tf)
 {
 	// Handle processor exceptions.
 	// LAB 3: Your code here.
+	if (tf->tf_trapno == T_PGFLT) {
+		page_fault_handler(tf);
+		return;
+	} else if (tf->tf_trapno == T_BRKPT) {
+		monitor(tf);
+		return;
+	} else if (tf->tf_trapno == T_SYSCALL) {
+		struct PushRegs *regs = &curenv->env_tf.tf_regs;
+		cprintf("syscall dispatched! %d \n", regs->reg_eax);
+		int32_t result = syscall(regs->reg_eax,
+					 regs->reg_edx,
+					 regs->reg_ecx,
+					 regs->reg_ebx,
+					 regs->reg_edi,
+					 regs->reg_esi);
+		regs->reg_eax = result;
+		return;
+	}
 
 	// Handle spurious interrupts
 	// The hardware sometimes raises these because of noise on the
@@ -190,7 +234,8 @@ trap_dispatch(struct Trapframe *tf)
 	// interrupt using lapic_eoi() before calling the scheduler!
 	// LAB 4: Your code here.
 
-	// Unexpected trap: The user process or the kernel has a bug.
+
+        // Unexpected trap: The user process or the kernel has a bug.
 	print_trapframe(tf);
 	if (tf->tf_cs == GD_KT)
 		panic("unhandled trap in kernel");
@@ -271,7 +316,9 @@ page_fault_handler(struct Trapframe *tf)
 	// Handle kernel-mode page faults.
 
 	// LAB 3: Your code here.
-
+	if ((tf->tf_cs & 3) == 0) {
+		panic("kernel page fault at: %x", fault_va);
+	}
 	// We've already handled kernel-mode exceptions, so if we get here,
 	// the page fault happened in user mode.
 
