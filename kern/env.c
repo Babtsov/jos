@@ -196,7 +196,6 @@ env_setup_vm(struct Env *e)
 	// UVPT maps the env's own page table read-only.
 	// Permissions: kernel R, user R
 	e->env_pgdir[PDX(UVPT)] = PADDR(e->env_pgdir) | PTE_P | PTE_U;
-	cprintf("env_pgdir: %x\n", env_pgdir);
 	return 0;
 }
 
@@ -530,7 +529,7 @@ env_run(struct Env *e)
 	// Step 2: Use env_pop_tf() to restore the environment's
 	//	   registers and drop into user mode in the
 	//	   environment.
-	if (curenv != NULL) {
+	if (curenv != NULL && curenv->env_status == ENV_RUNNING) {
 		curenv->env_status = ENV_RUNNABLE;
 	}
 	curenv = e;
@@ -544,6 +543,7 @@ env_run(struct Env *e)
 	//	e->env_tf to sensible values.
 
 	// LAB 3: Your code here.
+	unlock_kernel();
 	env_pop_tf(&curenv->env_tf);
 	panic("env_pop_tf somehow returned...");
 }

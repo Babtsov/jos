@@ -209,8 +209,11 @@ mem_init(void)
 	//       overwrite memory.  Known as a "guard page".
 	//     Permissions: kernel RW, user NONE
 
-	uintptr_t backed_stack = KSTACKTOP-KSTKSIZE;
-	boot_map_region(kern_pgdir, backed_stack, KSTKSIZE, PADDR(bootstack), PTE_W);
+//	uintptr_t backed_stack = KSTACKTOP-KSTKSIZE;
+//	boot_map_region(kern_pgdir, backed_stack, KSTKSIZE, PADDR(bootstack), PTE_W);
+
+	// Initialize the SMP-related parts of the memory map
+	mem_init_mp();
 
 	//////////////////////////////////////////////////////////////////////
 	// Map all of physical memory at KERNBASE.
@@ -219,9 +222,6 @@ mem_init(void)
 	// We might not have 2^32 - KERNBASE bytes of physical memory, but
 	// we just set up the mapping anyway.
 	// Permissions: kernel RW, user NONE
-
-	// Initialize the SMP-related parts of the memory map
-	mem_init_mp();
 
 	uintptr_t pa_end = 0xffffffff - KERNBASE + 1;
 	boot_map_region(kern_pgdir, KERNBASE, pa_end, 0, PTE_W);
@@ -273,6 +273,15 @@ mem_init_mp(void)
 	//     Permissions: kernel RW, user NONE
 	//
 	// LAB 4: Your code here:
+	for (int i = 0; i < NCPU; i++) {
+		uintptr_t stacktop = KSTACKTOP - i * (KSTKSIZE + KSTKGAP);
+		boot_map_region(kern_pgdir,
+				stacktop - KSTKSIZE,
+				KSTKSIZE,
+				PADDR(percpu_kstacks[i]),
+				PTE_W);
+	}
+
 
 }
 
@@ -292,22 +301,27 @@ void
 page_init(void)
 {
 	// LAB 4:
-	// Change your code to mark the physical page at MPENTRY_PADDR
-	// as in use
+	// 1) Mark the physical page at MPENTRY_PADDR as in use
 
-	// The example code here marks all physical pages as free.
-	// However this is not truly the case.  What memory is free?
+	// ensure mpentry can fit in a page
+	extern unsigned char mpentry_start[], mpentry_end[];
+	assert((uintptr_t)(mpentry_end - mpentry_start) <= PGSIZE);
+	struct PageInfo* mpentrypg = pa2page(MPENTRY_PADDR);
+	mpentrypg->pp_ref = 1;
 
-	//  1) Mark physical page 0 as in use.
-	//     This way we preserve the real-mode IDT and BIOS structures
-	//     in case we ever need them.  (Currently we don't, but...)
+	//  Mark physical page 0 as in use.
+	//  This way we preserve the real-mode IDT and BIOS structures
+	//  in case we ever need them.  (Currently we don't, but...)
 	pages[0].pp_ref = 1;
-	pages[0].pp_link = NULL;
 
-	//  2) The rest of base memory, [PGSIZE, npages_basemem * PGSIZE)
+
+	//  2) The rest of base memory up to npages_basemem * PGSIZE
 	//     is free.
-        for (int i = 1 ; i < npages_basemem; i++) {
-                pages[i].pp_ref = 0;
+        for (int i = 0 ; i < npages_basemem; i++) {
+		if (pages[i].pp_ref == 1) {
+			continue;
+		}
+                assert(pages[i].pp_ref == 0);
                 pages[i].pp_link = page_free_list;
                 page_free_list = &pages[i];
         }
@@ -327,7 +341,7 @@ page_init(void)
 	//     in physical memory?  Which pages are already in use for
 	//     page tables and other data structures?
 	for (int i = free_pa_pg_indx; i < npages; i++) {
-		pages[i].pp_ref = 0;
+		assert(pages[i].pp_ref == 0);
 		pages[i].pp_link = page_free_list;
 		page_free_list = &pages[i];
 	}
@@ -570,7 +584,7 @@ tlb_invalidate(pde_t *pgdir, void *va)
 //
 // Reserve size bytes in the MMIO region and map [pa,pa+size) at this
 // location.  Return the base of the reserved region.  size does *not*
-// have to be multiple of PGSIZE.
+// have to be multiple of PGSIZE. pa assumed to be paged aligned
 //
 void *
 mmio_map_region(physaddr_t pa, size_t size)
@@ -599,7 +613,15 @@ mmio_map_region(physaddr_t pa, size_t size)
 	// Hint: The staff solution uses boot_map_region.
 	//
 	// Your code here:
-	panic("mmio_map_region not implemented");
+	assert(pa % PGSIZE == 0);
+	size = ROUNDUP(size, PGSIZE);
+	if (base + size > MMIOLIM) {
+		panic("Allocation exceeds MMIOLIM: %x", base + size);
+	}
+	boot_map_region(kern_pgdir, base, size, pa, PTE_PCD | PTE_PWT | PTE_W);
+	void *ret_base = (void*)base;
+	base += size;
+	return ret_base;
 }
 
 static uintptr_t user_mem_check_addr;

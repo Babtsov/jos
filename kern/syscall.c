@@ -280,9 +280,11 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 		return sys_cgetc();
 	case SYS_env_destroy:
 		return sys_env_destroy((envid_t)a1);
+	case SYS_yield:
+		sys_yield();
+		return 0;
 	default:
 		return -E_INVAL;
 	}
-	return 0;
 }
 
