@@ -204,6 +204,10 @@ As we want to enable the processors to run simulatously when they are executing 
 1) aquire the kernel lock when we switch to kernel mode from user mode. the only way this can happen is through an interrupt/trap.
 2) release the lock when we leave the kernel mode.
 3) some special care is taken during initialization to ensure that the application processors and the bootstap processor don't step on each other's feet.
+
+_It seems that using the big kernel lock guarantees that only one CPU can run the kernel code at a time. Why do we still need separate kernel stacks for each CPU? Describe a scenario in which using a shared kernel stack will go wrong, even with the protection of the big kernel lock._  
+
+Consider the following scenario: a processor is changing from user mode to kernel mode and the hardware pushes information on the kernel stack. Then, before the processor got a chance to do something with that information, another processor also switches from user mode and kernel mode and overrides the information the first processor put on the kernel stack. Notice that the kernel lock doesn't prevent the hardware from overriding the kernel stack.
 ### Memory map
 ```
 /*
