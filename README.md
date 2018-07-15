@@ -190,6 +190,20 @@ trap_init_percpu(void)
 }
 ```
 
+## Exercise 5
+_Apply the big kernel lock, by calling lock_kernel() and unlock_kernel() at the proper locations._
+* _In i386_init(), acquire the lock before the BSP wakes up the other CPUs._  
+Notice that `i386_init()` is called by the bootstrap processor, and `lock_kernel()` should be called before `boot_aps();` because this is the function which the bootstrap processor uses to start all the other application processors. We want the bootstrap processor to obtain the lock on the kernel before the application processors will start executing user level processes. In addition to this, when the bootstrap processor starts the application processors, it does it one by one, waiting for one to finish initializing before continuing with the other. We probably don't want for some processors start executing user level environments before we finished to initialized ALL the application processors. 
+* _In mp_main(), acquire the lock after initializing the AP, and then call sched_yield() to start running environments on this AP._  
+This is necessary to ensure that each application processor is blocked by the lock which was aquired by the bootstrap processor. We need to do this because `sched_yield()` modifies kernel state, so we also don't want different application processors to race against each other and against the bootstrap processor inside that function.
+* _In trap(), acquire the lock when trapped from user mode. To determine whether a trap happened in user mode or in kernel mode, check the low bits of the tf_cs._  
+We need to lock the kernel if we were trapped from user mode because we might want to modify kernel data structures.
+* _In env_run(), release the lock right before switching to user mode. Do not do that too early or too late, otherwise you will experience races or deadlocks._  
+As we want to enable the processors to run simulatously when they are executing the user mode code, we release the kernel lock.  
+#### In summary, we do the following:
+1) aquire the kernel lock when we switch to kernel mode from user mode. the only way this can happen is through an interrupt/trap.
+2) release the lock when we leave the kernel mode.
+3) some special care is taken during initialization to ensure that the application processors and the bootstap processor don't step on each other's feet.
 ### Memory map
 ```
 /*
