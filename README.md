@@ -1,7 +1,7 @@
 # Lab 4 notes
 lab link: https://pdos.csail.mit.edu/6.828/2017/labs/lab4/  
 video explanation about APIC: https://youtu.be/rnGVincwk30?t=11m13s  
-
+caffeinated notes version: https://sipb.mit.edu/iap/6.828/lecture-notes/lec-5/    
 ## Exercise 1
 ```C
 void *
