@@ -208,6 +208,65 @@ As we want to enable the processors to run simulatously when they are executing 
 _It seems that using the big kernel lock guarantees that only one CPU can run the kernel code at a time. Why do we still need separate kernel stacks for each CPU? Describe a scenario in which using a shared kernel stack will go wrong, even with the protection of the big kernel lock._  
 
 Consider the following scenario: a processor is changing from user mode to kernel mode and the hardware pushes information on the kernel stack. Then, before the processor got a chance to do something with that information, another processor also switches from user mode and kernel mode and overrides the information the first processor put on the kernel stack. Notice that the kernel lock doesn't prevent the hardware from overriding the kernel stack.
+
+## Exercise 6
+_Implement round-robin scheduling in `sched_yield()`_
+```C
+void
+sched_yield(void)
+{
+        // Implement simple round-robin scheduling.
+        //
+        // Search through 'envs' for an ENV_RUNNABLE environment in
+        // circular fashion starting just after the env this CPU was
+        // last running.  Switch to the first such environment found.
+        //
+        // If no envs are runnable, but the environment previously
+        // running on this CPU is still ENV_RUNNING, it's okay to
+        // choose that environment.
+        //
+        // Never choose an environment that's currently running on
+        // another CPU (env_status == ENV_RUNNING). If there are
+        // no runnable environments, simply drop through to the code
+        // below to halt the cpu.
+        // LAB 4: Your code here.
+
+        int index = curenv ? ENVX(curenv->env_id) + 1 : 0;
+        bool found = false;
+        for (int i = 0; i < NENV; i++) {
+                index = (index + i) % NENV;
+                if (envs[index].env_status == ENV_RUNNABLE) {
+                        found = true;
+                        break;
+                }
+        }
+
+        if (found) {
+                env_run(&envs[index]);
+        } else if (curenv && curenv->env_status == ENV_RUNNING) {
+                env_run(curenv);
+        } else {
+                sched_halt();
+        }
+        panic("sched_yield attempted to return");
+}
+```
+_In your implementation of env_run() you should have called lcr3(). Before and after the call to lcr3(), your code makes references (at least it should) to the variable e, the argument to env_run. Upon loading the %cr3 register, the addressing context used by the MMU is instantly changed. But a virtual address (namely e) has meaning relative to a given address context--the address context specifies the physical address to which the virtual address maps. Why can the pointer e be dereferenced both before and after the addressing switch?_  
+
+The variable e is stored above KERNBASE, which means that its memory is mapped to the same location in all environments. All environments share the same kernel mappings because they all initially inherited the mappings of `kern_pgdir`.
+
+_Whenever the kernel switches from one environment to another, it must ensure the old environment'_s registers are saved so they can be restored properly later. Why? Where does this happen?_
+
+It happens in 2 steps. The first step is that `_alltraps` pushes into the kernel stack the registers that the hardware doesn't push automatically (such as the general purpose registers), then inside `trap`, we see the following code:
+```C
+// Copy trap frame (which is currently on the stack)
+// into 'curenv->env_tf', so that running the environment
+// will restart at the trap point.
+curenv->env_tf = *tf;
+```
+This basically copies over all the registers into the environment's structure so it can be later restored. This is important because when we switch environemnts, we don't want the new environment to override the registers which were used and relied by the old environment. This way we can have full isolation between the environments.
+The way an environment's registers are restored is happening inside `env_pop_tf` which is called by `env_run` whenever we choose to run an environment. `env_pop_tf`. The way this function works is that it first switches the stack pointer to point to the trap frame, and then manually pops all the registers that were pushed into the trap frame, and executes the `iret` instruction which pops the values that were pushed by the hardware and also returns the execution to the user process. 
+
 ### Memory map
 ```
 /*
