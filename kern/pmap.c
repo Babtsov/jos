@@ -306,6 +306,7 @@ page_init(void)
 	// ensure mpentry can fit in a page
 	extern unsigned char mpentry_start[], mpentry_end[];
 	assert((uintptr_t)(mpentry_end - mpentry_start) <= PGSIZE);
+
 	struct PageInfo* mpentrypg = pa2page(MPENTRY_PADDR);
 	mpentrypg->pp_ref = 1;
 
