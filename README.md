@@ -413,6 +413,29 @@ set_pgfault_handler(void (*handler)(struct UTrapframe *utf))
 }
 ```
 
+## Summary of how user-mode page fault handling works
+* the first time `set_pgfault_handler` is called, it allocates a page for the user exception stack. Then, it calls sys_env_set_pgfault_upcall to resiter the *assembly* pgfault entrypoint defined in lib/pfentry.S. Then it sets the user-mode global variable `_pgfault_handler` to point to our custom page fault handler function passed to `set_pgfault_handler`. This global variable `_pgfault_handler` is used by the assembly code inside pfentry.S itself. After all, the kernel must jump to the assembly code, and the assembly code must jump to our handler, so that's why we are not passing the address of the handler itself to the kernel.
+* When a page fault occurs, execution jumps to the kernel mode. the kernel starts executing `page_fault_handler`, which detects that we page faulted from user mode.
+* The kernel verifies if that environment has a page fault upcall (curenv->env_pgfault_upcall), and that the environment has its user exception stack mapped (as previously mentioned, memory has been mapped there by `set_pgfault_handler`). 
+* The kernel copies all register values from the trap frame to the user exception stack, taking into account whether the environment page faulted from the user stack or elsewhere.
+* The kernel modifies the trap frame of the environment so it actually returns to the page fault upcall instead of returning back to where the page fault occured. This is done by modifying the trap frame instruction pointer and setting it equal to the address of the page fault upcall (which is written in assembly), and the stack pointer to point to the user exception stack.
+* after the trap frame is popped, execution is in the assembly code, which calls our custom page fault handler and then later cleans up after itself.
+
+## why do user/faultalloc and user/faultallocbad behave differently?
+### faultalloc
+faultalloc calls `cprintf("%s\n", (char*)0xDeadBeef);` and this causes the following:
+* the first character of the string located in 0xDeadBeef is attempted to be read by the environment.
+* a page fault occurs becase 0xDeadBeef is unmapped
+* the page fault handler that we have registered runs. During the run it maps the missing page and also populates the string (using the snprintf function)
+* execution returns back from where it faulted, and cprintf can resume printing to the screen because the memory is now mapped and even contains some data.
+### faultallocbad
+faultallocbad calls `sys_cputs((char*)0xDEADBEEF, 4);` and this causes the following:
+* the memory in 0xDEADBEEF is not accessed by the environment, but is instead passed directly to the kernel through a system call. (notice that there was no page fault here and thus the handler has never ran).
+* During the handling of this system call, the kernel detects that the memory is unmapped and kills the environment. Therefore, nothing is printed.
+
+
+
+
 ### Memory map
 ```
 /*
