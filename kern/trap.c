@@ -94,7 +94,7 @@ trap_init(void)
 	SETGATE(idt[T_ALIGN], true, GD_KT,t_align, 0);
 	SETGATE(idt[T_MCHK], false, GD_KT,t_mchk, 0);
 	SETGATE(idt[T_SIMDERR], true, GD_KT,t_simderr, 0);
-	
+
 	SETGATE(idt[T_SYSCALL], true, GD_KT, t_syscall, 3);
 
 	// ensure bootstrap cpu gets initialized too
@@ -353,7 +353,39 @@ page_fault_handler(struct Trapframe *tf)
 	//   (the 'tf' variable points at 'curenv->env_tf').
 
 	// LAB 4: Your code here.
+	if (!curenv->env_pgfault_upcall) {
+		goto bad;
+	}
 
+	uintptr_t UXSTACKBOTTOM = UXSTACKTOP - PGSIZE;
+
+	uintptr_t tftop = UXSTACKTOP;
+	if (tf->tf_esp >= UXSTACKBOTTOM && tf->tf_esp < UXSTACKTOP) {
+		// if we are on the user exception stack, then
+		// place the next trap frame 4 bytes underneath
+		tftop = tf->tf_esp - 4;
+	}
+
+	struct UTrapframe *utf =
+		(struct UTrapframe *)(tftop - sizeof(struct UTrapframe));
+
+	// ensure user is authorized accessing memory before writing data
+	user_mem_assert(curenv, utf, sizeof(struct UTrapframe), PTE_U | PTE_W);
+
+	utf->utf_fault_va = fault_va;
+	utf->utf_err = tf->tf_err;
+	utf->utf_regs = tf->tf_regs;
+	utf->utf_eip = tf->tf_eip;
+	utf->utf_eflags = tf->tf_eflags;
+	utf->utf_esp = tf->tf_esp;
+
+	// ensure environment returns to pfentry.S with tf stack
+	curenv->env_tf.tf_eip = (uintptr_t)curenv->env_pgfault_upcall;
+	curenv->env_tf.tf_esp = (uintptr_t)utf;
+
+	env_run(curenv);
+
+ bad:
 	// Destroy the environment that caused the fault.
 	cprintf("[%08x] user fault va %08x ip %08x\n",
 		curenv->env_id, fault_va, tf->tf_eip);
