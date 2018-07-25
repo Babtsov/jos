@@ -354,6 +354,7 @@ page_fault_handler(struct Trapframe *tf)
 
 	// LAB 4: Your code here.
 	if (!curenv->env_pgfault_upcall) {
+		cprintf("no page fault upcall. envid: %x\n", curenv->env_id);
 		goto bad;
 	}
 

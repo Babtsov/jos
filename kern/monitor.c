@@ -12,13 +12,14 @@
 #include <kern/kdebug.h>
 #include <kern/trap.h>
 #include <kern/pmap.h>
-
+#include <kern/env.h>
 
 #define CMDBUF_SIZE	80	// enough for one VGA text line
 
 void
 print_pfields(pte_t pte)
 {
+	if (pte & PTE_COW) cprintf("PTE_COW ");
 	if (pte & PTE_G) cprintf("PTE_G ");
 	if (pte & PTE_PS) cprintf("PTE_PS ");
 	if (pte & PTE_D) cprintf("PTE_D ");
@@ -45,10 +46,38 @@ static struct Command commands[] = {
 	{ "backtrace", "Display stack trace", mon_backtrace },
 	{ "vaddrinfo", "Display information about virtual address", mon_vaddrinfo },
 	{ "pgdir", "Display the contents of a page directory or a page table", mon_pgdir },
-	{ "vminfo", "Display a summary of all the virtual address space", mon_vminfo }
+	{ "vminfo", "Display a summary of all the virtual address space", mon_vminfo },
+	{"envinfo", "Display information about environments", mon_envinfo}
 };
 
 /***** Implementations of basic kernel monitor commands *****/
+
+int
+mon_envinfo(int argc, char **argv, struct Trapframe *tf)
+{
+	if (curenv) {
+		cprintf("current env: %x\n", curenv->env_id);
+	} else {
+		cprintf("current env: null\n");
+	}
+	char *status_arr[] = {"ENV_FREE", "ENV_DYING", "ENV_RUNNABLE", "ENV_RUNNING", "ENV_NOT_RUNNABLE"};
+
+	for (int i = 0; i < NENV; i++) {
+		const volatile struct Env *env = &envs[i];
+		if (env->env_status == ENV_FREE) {
+			continue;
+		}
+		char* status = (env->env_status < sizeof(status_arr)) ?
+			status_arr[env->env_status] : "(unknown)";
+		cprintf("[%x]: parent_id: %x env_pgdir: %x upcall: %x status: %s\n",
+			env->env_id,
+			env->env_parent_id,
+			env->env_pgdir,
+			(uintptr_t)env->env_pgfault_upcall,
+			status);
+	}
+	return 0;
+}
 
 int
 mon_quit(int argc, char **argv, struct Trapframe *tf)
@@ -131,7 +160,7 @@ print_pagetable_entry(pte_t *pte_table, int offset)
 {
 	pte_t pte = pte_table[offset];
 	cprintf("%03x: %08x ",offset, PTE_ADDR(pte));
-	if ((pte & 0x1ff) == 0) {
+	if ((pte & 0xEFF) == 0) {
 		cprintf("NONE\n");
 		return;
 	}
@@ -278,7 +307,7 @@ mon_vminfo(int argc, char **argv, struct Trapframe *tf)
 	for (uint64_t i = 0, prev = 0; i < (one << 32); i += PGSIZE) {
 		uintptr_t addr = i, prev_addr = prev;
 		pte_t *pte =  pgdir_walk(pgdir, (const void *)addr, false);
-		int pfields = pte ? (*pte & 0x7) : 0;
+		int pfields = pte ? (*pte & PTE_SYSCALL) : 0;
 
 		if (i == 0) {
 			prev_pfields = pfields;

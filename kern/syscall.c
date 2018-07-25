@@ -41,6 +41,7 @@ sys_getenvid(void)
 	return curenv->env_id;
 }
 
+#include <kern/monitor.h>
 // Destroy a given environment (possibly the currently running environment).
 //
 // Returns 0 on success, < 0 on error.  Errors are:
@@ -89,6 +90,7 @@ sys_exofork(void)
 		return err;
 	}
 	e->env_status = ENV_NOT_RUNNABLE;
+	e->env_pgfault_upcall = curenv->env_pgfault_upcall;
 	e->env_tf = curenv->env_tf;
 	e->env_tf.tf_regs.reg_eax = 0;
 	return e->env_id;

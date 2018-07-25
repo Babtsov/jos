@@ -126,7 +126,7 @@ env_init(void)
 		envs[i].env_id = 0;
 	}
 	envs[NENV - 1].env_link = NULL;
-	
+
 	// Per-CPU part of the initialization
 	env_init_percpu();
 }
@@ -358,7 +358,7 @@ load_icode(struct Env *e, uint8_t *binary)
 	//  to make sure that the environment starts executing there.
 	//  What?  (See env_run() and env_pop_tf() below.)
 	// LAB 3: Your code here.
-	
+
 	struct Elf *elf = (struct Elf *)binary;
 	if (elf->e_magic != ELF_MAGIC) {
 		panic("invalid ELF file\n");
@@ -459,6 +459,7 @@ env_free(struct Env *e)
 	e->env_status = ENV_FREE;
 	e->env_link = env_free_list;
 	env_free_list = e;
+	cprintf("finished env_free for %x\n", curenv->env_id);
 }
 
 //
