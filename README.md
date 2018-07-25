@@ -267,6 +267,175 @@ curenv->env_tf = *tf;
 This basically copies over all the registers into the environment's structure so it can be later restored. This is important because when we switch environemnts, we don't want the new environment to override the registers which were used and relied by the old environment. This way we can have full isolation between the environments.
 The way an environment's registers are restored is happening inside `env_pop_tf` which is called by `env_run` whenever we choose to run an environment. `env_pop_tf`. The way this function works is that it first switches the stack pointer to point to the trap frame, and then manually pops all the registers that were pushed into the trap frame, and executes the `iret` instruction which pops the values that were pushed by the hardware and also returns the execution to the user process. 
 
+
+## Exercise 8
+_Implement the sys_env_set_pgfault_upcall system call. Be sure to enable permission checking when looking up the environment ID of the target environment, since this is a "dangerous" system call_  
+```C
+static int
+sys_env_set_pgfault_upcall(envid_t envid, void *func)
+{
+        // LAB 4: Your code here.
+        struct Env *e;
+        int err = envid2env(envid, &e, 1);
+        if (err < 0) {
+                return err;
+        }
+        e->env_pgfault_upcall = func;
+        return 0;
+}
+```
+
+## Exercise 9
+_Implement the code in page_fault_handler in kern/trap.c required to dispatch page faults to the user-mode handler. Be sure to take appropriate precautions when writing into the exception stack. (What happens if the user environment runs out of space on the exception stack?)_  
+```C
+void
+page_fault_handler(struct Trapframe *tf)
+{
+        uint32_t fault_va;
+
+        // Read processor's CR2 register to find the faulting address
+        fault_va = rcr2();
+
+        // Handle kernel-mode page faults.
+        if ((tf->tf_cs & 3) == 0) {
+                panic("kernel page fault at: %x", fault_va);
+        }
+        
+        if (!curenv->env_pgfault_upcall) {
+                goto bad;
+        }
+
+        uintptr_t UXSTACKBOTTOM = UXSTACKTOP - PGSIZE;
+
+        uintptr_t tftop = UXSTACKTOP;
+        if (tf->tf_esp >= UXSTACKBOTTOM && tf->tf_esp < UXSTACKTOP) {
+                // if we are on the user exception stack, then
+                // place the next trap frame 4 bytes underneath
+                tftop = tf->tf_esp - 4;
+        }
+
+        struct UTrapframe *utf =
+                (struct UTrapframe *)(tftop - sizeof(struct UTrapframe));
+
+        // ensure user is authorized accessing memory before writing data
+        user_mem_assert(curenv, utf, sizeof(struct UTrapframe), PTE_U | PTE_W);
+
+        utf->utf_fault_va = fault_va;
+        utf->utf_err = tf->tf_err;
+        utf->utf_regs = tf->tf_regs;
+        utf->utf_eip = tf->tf_eip;
+        utf->utf_eflags = tf->tf_eflags;
+        utf->utf_esp = tf->tf_esp;
+
+        // ensure environment returns to pfentry.S with tf stack
+        curenv->env_tf.tf_eip = (uintptr_t)curenv->env_pgfault_upcall;
+        curenv->env_tf.tf_esp = (uintptr_t)utf;
+
+        env_run(curenv);
+
+ bad:
+        // Destroy the environment that caused the fault.
+        cprintf("[%08x] user fault va %08x ip %08x\n",
+                curenv->env_id, fault_va, tf->tf_eip);
+        print_trapframe(tf);
+        env_destroy(curenv);
+}
+```
+If we run out of space in the user exception stack, the kernel will destroy the environment (if we don't take this precution, then the kernel itself will page fault, which will halt the system).
+
+## Exercise 10
+_Implement the \_pgfault\_upcall routine in lib/pfentry.S. The interesting part is returning to the original point in the user code that caused the page fault. You'll return directly there, without going back through the kernel. The hard part is simultaneously switching stacks and re-loading the EIP._
+```assembly
+.text
+.globl _pgfault_upcall
+_pgfault_upcall:
+        // Call the C page fault handler.
+        pushl %esp                      // function argument: pointer to UTF
+        movl _pgfault_handler, %eax
+        call *%eax
+        addl $4, %esp                   // pop function argument
+
+        movl 40(%esp), %eax // grab trap-time eip
+        movl 48(%esp), %ebx // grab trap-time esp
+        subl $4, %ebx // reserve a slot to store the eip
+        movl %ebx, 48(%esp) // adjust trap-time esp so ret will pop the eip
+        mov %eax, (%ebx) // now eip is in the trap-time stack
+
+        addl $8, %esp // pop utf_fault_va and utf_err since we have no use for them
+
+        // Restore the trap-time registers.  After you do this, you
+        // can no longer modify any general-purpose registers.
+        popal
+        
+        addl $4, %esp // skip trap-time eip because we can't load it as is
+        
+        // Restore eflags from the stack.  After you do this, you can
+        // no longer use arithmetic operations or anything else that
+        // modifies eflags.
+        popfl
+        
+        // Switch back to the adjusted trap-time stack.
+        popl %esp
+        
+        // Return to re-execute the instruction that faulted.
+        ret
+```
+### why do we need to push a an empty 32-bit word between the stack frames?
+Let's first think about how we return the exection back to where it page faulted: We need to restore all general purpose registers, the eflags, the stack pointer (%esp), and the instruction pointer (%eip).  
+
+`popl %esp` is the instruction that switches to the destination stack (restores its previous value before the page fault). But how do we restore the %eip? unfortunately, this can't be done directly. instead, we use the stack to reload it. For example, if we have %eip on the stack and we execute the `ret` instruction, the processor will load the %eip with whatever is on the stack (and will pop off that value). 
+Since we `ret` after we already restored the stack, we need our %eip to exist right where the restored %esp is pointing towards!. in other words, it needs to be 4 bytes underneath the original target %esp.   
+
+In order for this plan to work, we MUST guaretee that we'll be able to store something 4 bytes underneath the target `%esp`. Usually this is not an issue if our target esp is not in the exception stack, but if it is, then our trap frame (from which we are returning) is exactly below the destination stack (to which we are returning). Therefore, if we don't allocate the 4 bytes as described, writing underneath the target %esp will corrupt the top of our trap frame!
+
+
+## Exercise 11
+_Finish set_pgfault_handler() in lib/pgfault.c_  
+```C
+void
+set_pgfault_handler(void (*handler)(struct UTrapframe *utf))
+{
+        int r;
+
+        if (_pgfault_handler == 0) {
+                // First time through!
+                int err = sys_page_alloc(0,
+                                         (void *)(UXSTACKTOP - PGSIZE),
+                                         PTE_W | PTE_U);
+                if (err < 0) {
+                        panic("sys_page_alloc: %e", err);
+                }
+                sys_env_set_pgfault_upcall(0, _pgfault_upcall);
+        }
+
+        // Save handler pointer for assembly to call.
+        _pgfault_handler = handler;
+}
+```
+
+## Summary of how user-mode page fault handling works
+* the first time `set_pgfault_handler` is called, it allocates a page for the user exception stack. Then, it calls sys_env_set_pgfault_upcall to resiter the *assembly* pgfault entrypoint defined in lib/pfentry.S. Then it sets the user-mode global variable `_pgfault_handler` to point to our custom page fault handler function passed to `set_pgfault_handler`. This global variable `_pgfault_handler` is used by the assembly code inside pfentry.S itself. After all, the kernel must jump to the assembly code, and the assembly code must jump to our handler, so that's why we are not passing the address of the handler itself to the kernel.
+* When a page fault occurs, execution jumps to the kernel mode. the kernel starts executing `page_fault_handler`, which detects that we page faulted from user mode.
+* The kernel verifies if that environment has a page fault upcall (curenv->env_pgfault_upcall), and that the environment has its user exception stack mapped (as previously mentioned, memory has been mapped there by `set_pgfault_handler`). 
+* The kernel copies all register values from the trap frame to the user exception stack, taking into account whether the environment page faulted from the user stack or elsewhere.
+* The kernel modifies the trap frame of the environment so it actually returns to the page fault upcall instead of returning back to where the page fault occured. This is done by modifying the trap frame instruction pointer and setting it equal to the address of the page fault upcall (which is written in assembly), and the stack pointer to point to the user exception stack.
+* after the trap frame is popped, execution is in the assembly code, which calls our custom page fault handler and then later cleans up after itself.
+
+## why do user/faultalloc and user/faultallocbad behave differently?
+### faultalloc
+faultalloc calls `cprintf("%s\n", (char*)0xDeadBeef);` and this causes the following:
+* the first character of the string located in 0xDeadBeef is attempted to be read by the environment.
+* a page fault occurs becase 0xDeadBeef is unmapped
+* the page fault handler that we have registered runs. During the run it maps the missing page and also populates the string (using the snprintf function)
+* execution returns back from where it faulted, and cprintf can resume printing to the screen because the memory is now mapped and even contains some data.
+### faultallocbad
+faultallocbad calls `sys_cputs((char*)0xDEADBEEF, 4);` and this causes the following:
+* the memory in 0xDEADBEEF is not accessed by the environment, but is instead passed directly to the kernel through a system call. (notice that there was no page fault here and thus the handler has never ran).
+* During the handling of this system call, the kernel detects that the memory is unmapped and kills the environment. Therefore, nothing is printed.
+
+
+
+
 ### Memory map
 ```
 /*
