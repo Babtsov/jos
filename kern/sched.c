@@ -77,7 +77,7 @@ sched_halt(void)
 	// timer interupts come in, we know we should re-acquire the
 	// big kernel lock
 	xchg(&thiscpu->cpu_status, CPU_HALTED);
-	cprintf("cpu %x requested halt\n", thiscpu->cpu_id);
+//	cprintf("cpu %x requested halt\n", thiscpu->cpu_id);
 	// Release the big kernel lock as if we were "leaving" the kernel
 	unlock_kernel();
 
@@ -88,7 +88,7 @@ sched_halt(void)
 		"pushl $0\n"
 		"pushl $0\n"
 		// Uncomment the following line after completing exercise 13
-		//"sti\n"
+		"sti\n"
 		"1:\n"
 		"hlt\n"
 		"jmp 1b\n"

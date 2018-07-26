@@ -71,31 +71,33 @@ trap_init(void)
 	// LAB 3: Your code here.
 
 	/* awk script to generate the entries automatically:
-	   awk '{print "SETGATE(idt[" $2 "], true, GD_KT," tolower($2) ", 0);"}'
+	   awk '{print "SETGATE(idt[" $2 "], false, GD_KT," tolower($2) ", 0);"}'
 
-	   see https://wiki.osdev.org/Exceptions to help decide which one of these
-	   should be set istrap=false
+	   see https://wiki.osdev.org/Exceptions to see which one is by default
+	   a trap
 	*/
-	SETGATE(idt[T_DIVIDE], true, GD_KT,t_divide, 0);
-	SETGATE(idt[T_DEBUG], true, GD_KT,t_debug, 0);
-	SETGATE(idt[T_NMI], false, GD_KT,t_nmi, 0);
-	SETGATE(idt[T_BRKPT], true, GD_KT,t_brkpt, 3);
-	SETGATE(idt[T_OFLOW], true, GD_KT,t_oflow, 0);
-	SETGATE(idt[T_BOUND], true, GD_KT,t_bound, 0);
-	SETGATE(idt[T_ILLOP], true, GD_KT,t_illop, 0);
-	SETGATE(idt[T_DEVICE], true, GD_KT,t_device, 0);
-	SETGATE(idt[T_DBLFLT], false, GD_KT,t_dblflt, 0);
-	SETGATE(idt[T_TSS], true, GD_KT,t_tss, 0);
-	SETGATE(idt[T_SEGNP], true, GD_KT,t_segnp, 0);
-	SETGATE(idt[T_STACK], true, GD_KT,t_stack, 0);
-	SETGATE(idt[T_GPFLT], true, GD_KT,t_gpflt, 0);
-	SETGATE(idt[T_PGFLT], true, GD_KT,t_pgflt, 0);
-	SETGATE(idt[T_FPERR], true, GD_KT,t_fperr, 0);
-	SETGATE(idt[T_ALIGN], true, GD_KT,t_align, 0);
-	SETGATE(idt[T_MCHK], false, GD_KT,t_mchk, 0);
-	SETGATE(idt[T_SIMDERR], true, GD_KT,t_simderr, 0);
+        SETGATE(idt[T_DIVIDE], false, GD_KT,t_divide, 0);
+        SETGATE(idt[T_DEBUG], false, GD_KT,t_debug, 0);
+        SETGATE(idt[T_NMI], false, GD_KT,t_nmi, 0);
+        SETGATE(idt[T_BRKPT], false, GD_KT,t_brkpt, 3);
+        SETGATE(idt[T_OFLOW], false, GD_KT,t_oflow, 0);
+        SETGATE(idt[T_BOUND], false, GD_KT,t_bound, 0);
+        SETGATE(idt[T_ILLOP], false, GD_KT,t_illop, 0);
+        SETGATE(idt[T_DEVICE], false, GD_KT,t_device, 0);
+        SETGATE(idt[T_DBLFLT], false, GD_KT,t_dblflt, 0);
+        SETGATE(idt[T_TSS], false, GD_KT,t_tss, 0);
+        SETGATE(idt[T_SEGNP], false, GD_KT,t_segnp, 0);
+        SETGATE(idt[T_STACK], false, GD_KT,t_stack, 0);
+        SETGATE(idt[T_GPFLT], false, GD_KT,t_gpflt, 0);
+        SETGATE(idt[T_PGFLT], false, GD_KT,t_pgflt, 0);
+        SETGATE(idt[T_FPERR], false, GD_KT,t_fperr, 0);
+        SETGATE(idt[T_ALIGN], false, GD_KT,t_align, 0);
+        SETGATE(idt[T_MCHK], false, GD_KT,t_mchk, 0);
+        SETGATE(idt[T_SIMDERR], false, GD_KT,t_simderr, 0);
 
-	SETGATE(idt[T_SYSCALL], true, GD_KT, t_syscall, 3);
+	SETGATE(idt[T_SYSCALL], false, GD_KT, t_syscall, 3);
+
+	SETGATE(idt[IRQ_OFFSET + IRQ_TIMER], false, GD_KT, irq_timer, 0);
 
 	// ensure bootstrap cpu gets initialized too
 	trap_init_percpu();
@@ -233,13 +235,18 @@ trap_dispatch(struct Trapframe *tf)
 	// Handle clock interrupts. Don't forget to acknowledge the
 	// interrupt using lapic_eoi() before calling the scheduler!
 	// LAB 4: Your code here.
-
+	if (tf->tf_trapno == IRQ_OFFSET + IRQ_TIMER) {
+		lapic_eoi();
+		sched_yield();
+//		cprintf("timer interrupt!!!!\n");
+	}
 
         // Unexpected trap: The user process or the kernel has a bug.
 	print_trapframe(tf);
 	if (tf->tf_cs == GD_KT)
 		panic("unhandled trap in kernel");
 	else {
+		cprintf("unhandled trap in user space\n");
 		env_destroy(curenv);
 		return;
 	}
@@ -264,6 +271,12 @@ trap(struct Trapframe *tf)
 	// Check that interrupts are disabled.  If this assertion
 	// fails, DO NOT be tempted to fix it by inserting a "cli" in
 	// the interrupt path.
+	if (read_eflags() & FL_IF) {
+		cprintf("TYPE 0x%08x\n", tf->tf_trapno);
+		print_trapframe(tf);
+		panic("interrupts are not disabled");
+	}
+
 	assert(!(read_eflags() & FL_IF));
 
 	if ((tf->tf_cs & 3) == 3) {

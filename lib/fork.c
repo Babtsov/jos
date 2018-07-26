@@ -18,7 +18,7 @@ pgfault(struct UTrapframe *utf)
 	uint32_t err = utf->utf_err;
 	int r;
 
-	cprintf("pgfault handler: %x\n", (uintptr_t)addr);
+//	cprintf("[%x] pgfault handler: %x\n", sys_getenvid(),  (uintptr_t)addr);
 
 	// Check that the faulting access was (1) a write, and (2) to a
 	// copy-on-write page.  If not, panic.
@@ -142,9 +142,9 @@ fork(void)
 	}
 
 	// parent
-	cprintf("parent %x dupping pages for child: %x -> ",
-		thisenv->env_id,
-		envid);
+//	cprintf("parent %x dupping pages for child: %x -> ",
+//		thisenv->env_id,
+//		envid);
 	bool is_below_ulim = true;
 	for (int i = 0; is_below_ulim && i < NPDENTRIES ; i++) {
 		if (!(uvpd[i] & PTE_P)) {
@@ -157,12 +157,12 @@ fork(void)
 			} else if (pn >= (UTOP >> PGSHIFT)) {
 				is_below_ulim = false;
 			} else if (uvpt[pn] & PTE_P) {
-				cprintf("%x ", pn);
+//				cprintf("%x ", pn);
 				duppage(envid, pn);
 			}
 		}
 	}
-	cprintf("\n");
+//	cprintf("\n");
 	sys_page_alloc(envid, (void *)(UXSTACKTOP - PGSIZE), PTE_W | PTE_U);
 	sys_env_set_status(envid, ENV_RUNNABLE);
 
