@@ -319,7 +319,44 @@ static int
 sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 {
 	// LAB 4: Your code here.
-	panic("sys_ipc_try_send not implemented");
+	int err = 0;
+	uintptr_t va = (uintptr_t)srcva;
+	struct Env *env = NULL;
+	if ((err = envid2env(envid, &env, false)) < 0) {
+		return err;
+	} else if (!env->env_ipc_recving) {
+		return -E_IPC_NOT_RECV;
+	} else if (va < UTOP && (va % PGSIZE) != 0) {
+		return -E_INVAL;
+	} else if (va < UTOP && (perm & ~PTE_SYSCALL) != 0) {
+		return -E_INVAL;
+	}
+
+	int received_perm = 0;
+	if (va < UTOP) {
+		pte_t *pte = NULL;
+		struct PageInfo *p = page_lookup(curenv->env_pgdir, srcva, &pte);
+		if (!p) {
+			return -E_INVAL;
+		} else if ((perm & PTE_W) && !(*pte & PTE_W)) {
+			return -E_INVAL;
+		}
+		if ((err = page_insert(env->env_pgdir,
+				       p,
+				       env->env_ipc_dstva,
+				       perm)) < 0) {
+			return err;
+		}
+		received_perm = perm;
+	}
+
+	env->env_ipc_value = value;
+	env->env_ipc_from = curenv->env_id;
+	env->env_ipc_perm = received_perm;
+
+	env->env_ipc_recving = false;
+	env->env_status = ENV_RUNNABLE;
+	return 0;
 }
 
 // Block until a value is ready.  Record that you want to receive
@@ -330,15 +367,28 @@ sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 // 'dstva' is the virtual address at which the sent page should be mapped.
 //
 // This function only returns on error, but the system call will eventually
-// return 0 on success.
+// return 0 on success because we'll set eax to 0 before yielding the CPU
 // Return < 0 on error.  Errors are:
 //	-E_INVAL if dstva < UTOP but dstva is not page-aligned.
 static int
 sys_ipc_recv(void *dstva)
 {
 	// LAB 4: Your code here.
-	panic("sys_ipc_recv not implemented");
-	return 0;
+	uintptr_t va = (uintptr_t)dstva;
+	if (va % PGSIZE != 0) {
+		return -E_INVAL;
+	}
+
+	curenv->env_status = ENV_NOT_RUNNABLE;
+	curenv->env_ipc_recving = true;
+	if (va >= UTOP) {
+		curenv->env_tf.tf_regs.reg_eax = 0;
+		sched_yield(); // noreturn
+	}
+	curenv->env_ipc_dstva = dstva;
+
+	curenv->env_tf.tf_regs.reg_eax = 0;
+	sched_yield(); // noreturn
 }
 
 // Dispatches to the correct kernel function, passing the arguments.
@@ -375,6 +425,11 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 			            (envid_t)a3, (void *)a4, (int)a5);
 	case SYS_page_unmap:
 		return sys_page_unmap((envid_t)a1, (void *)a2);
+	case SYS_ipc_recv:
+		return sys_ipc_recv((void *)a1);
+	case SYS_ipc_try_send:
+		return sys_ipc_try_send((envid_t)a1, (uint32_t)a2,
+					(void *)a3, (unsigned)a4);
 	default:
 		return -E_INVAL;
 	}

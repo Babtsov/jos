@@ -30,7 +30,7 @@ pgfault(struct UTrapframe *utf)
 	pte_t pte = uvpt[(uintptr_t)addr >> PGSHIFT];
 
 	if (!(err & 2)) {
-		panic("pgfault was not a write");
+		panic("pgfault was not a write. err: %x", err);
 	} else if (!(pte & PTE_COW)) {
 		panic("pgfault is not copy on write");
 	}

@@ -60,21 +60,28 @@ mon_envinfo(int argc, char **argv, struct Trapframe *tf)
 	} else {
 		cprintf("current env: null\n");
 	}
-	char *status_arr[] = {"ENV_FREE", "ENV_DYING", "ENV_RUNNABLE", "ENV_RUNNING", "ENV_NOT_RUNNABLE"};
+	char *status_arr[] = {"ENV_FREE", "ENV_DYING", "ENV_RUNNABLE",
+			      "ENV_RUNNING", "ENV_NOT_RUNNABLE"};
 
 	for (int i = 0; i < NENV; i++) {
 		const volatile struct Env *env = &envs[i];
 		if (env->env_status == ENV_FREE) {
 			continue;
 		}
+
 		char* status = (env->env_status < sizeof(status_arr)) ?
 			status_arr[env->env_status] : "(unknown)";
-		cprintf("[%x]: parent_id: %x env_pgdir: %x upcall: %x status: %s\n",
+		cprintf("[%x]: parent_id: %x env_pgdir: %x upcall: %x status: %s ",
 			env->env_id,
 			env->env_parent_id,
 			env->env_pgdir,
 			(uintptr_t)env->env_pgfault_upcall,
 			status);
+
+		uint32_t eip = env->env_tf.tf_eip;
+		struct Eipdebuginfo info;
+		debuginfo_eip(eip, &info);
+		cprintf("eip: %x (%s:%d)\n", eip, info.eip_file, info.eip_line);
 	}
 	return 0;
 }
