@@ -68,13 +68,13 @@
 // The PTE_AVAIL bits aren't used by the kernel or interpreted by the
 // hardware, so user processes are allowed to set them arbitrarily.
 #define PTE_AVAIL	0xE00	// Available for software use
-
+#define PTE_COW         0x800   // Copy on write
 // Flags in PTE_SYSCALL may be used in system calls.  (Others may not.)
 #define PTE_SYSCALL	(PTE_AVAIL | PTE_P | PTE_W | PTE_U)
 
 // Address in page table or page directory entry
 #define PTE_ADDR(pte)	((physaddr_t) (pte) & ~0xFFF)
-
+#define PTE_PERM(pte)   ((pte) & 0xEFF)
 // Control Register flags
 #define CR0_PE		0x00000001	// Protection Enable
 #define CR0_MP		0x00000002	// Monitor coProcessor
