@@ -78,6 +78,9 @@
 	TRAPHANDLER_NOEC(t_default, T_DEFAULT);
 
 	TRAPHANDLER_NOEC(irq_timer, IRQ_OFFSET + IRQ_TIMER);
+
+	/* default handler for "unhandled" interrupts */
+	TRAPHANDLER_NOEC(irq_error, IRQ_OFFSET + IRQ_ERROR);
 /*
  * Lab 3: Your code here for _alltraps
  */

@@ -49,4 +49,6 @@ void t_syscall();
 void t_default();
 
 void irq_timer();
+void irq_error();
+
 #endif /* JOS_KERN_TRAP_H */

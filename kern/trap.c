@@ -97,6 +97,12 @@ trap_init(void)
 
 	SETGATE(idt[T_SYSCALL], false, GD_KT, t_syscall, 3);
 
+	// default initialize all IRQs so we are at least aware that
+	// an unhandled interrupt occured
+	for (int i = 0; i < 15; i++) {
+		SETGATE(idt[IRQ_OFFSET + i], false, GD_KT, irq_error, 0);
+	}
+
 	SETGATE(idt[IRQ_OFFSET + IRQ_TIMER], false, GD_KT, irq_timer, 0);
 
 	// ensure bootstrap cpu gets initialized too
@@ -237,8 +243,7 @@ trap_dispatch(struct Trapframe *tf)
 	// LAB 4: Your code here.
 	if (tf->tf_trapno == IRQ_OFFSET + IRQ_TIMER) {
 		lapic_eoi();
-		sched_yield();
-//		cprintf("timer interrupt!!!!\n");
+		sched_yield(); // noreturn
 	}
 
         // Unexpected trap: The user process or the kernel has a bug.

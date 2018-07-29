@@ -142,9 +142,11 @@ fork(void)
 	}
 
 	// parent
+
 //	cprintf("parent %x dupping pages for child: %x -> ",
 //		thisenv->env_id,
 //		envid);
+
 	bool is_below_ulim = true;
 	for (int i = 0; is_below_ulim && i < NPDENTRIES ; i++) {
 		if (!(uvpd[i] & PTE_P)) {
@@ -163,7 +165,13 @@ fork(void)
 		}
 	}
 //	cprintf("\n");
+
+	// install upcall
+	extern void _pgfault_upcall();
+	sys_env_set_pgfault_upcall(envid, _pgfault_upcall);
+	// allocate the user exception stack (not COW)
 	sys_page_alloc(envid, (void *)(UXSTACKTOP - PGSIZE), PTE_W | PTE_U);
+	// let the child start
 	sys_env_set_status(envid, ENV_RUNNABLE);
 
 	return envid;
