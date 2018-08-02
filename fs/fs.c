@@ -46,6 +46,17 @@ free_block(uint32_t blockno)
 	bitmap[blockno/32] |= 1<<(blockno%32);
 }
 
+inline int
+write_block(int blockno, void *addr)
+{
+	if (super && blockno >= super->s_nblocks)
+		panic("bad block number %08x in diskaddr", blockno);
+	return ide_write((BLKSIZE / SECTSIZE) * blockno,
+			 ROUNDDOWN(addr, PGSIZE),
+			 BLKSIZE / SECTSIZE );
+}
+
+
 // Search the bitmap for a free block and allocate it.  When you
 // allocate a block, immediately flush the changed bitmap block
 // to disk.
@@ -62,8 +73,48 @@ alloc_block(void)
 	// super->s_nblocks blocks in the disk altogether.
 
 	// LAB 5: Your code here.
-	panic("alloc_block not implemented");
-	return -E_NO_DISK;
+	int nb = super->s_nblocks;
+	int bitmaplim = (nb % 32) ? nb / 32 + 1 : nb / 32;
+
+	int i;
+	for (i = 0; i < bitmaplim; i++) {
+		if (bitmap[i] != 0) {
+			break;
+		}
+	}
+	if (i == bitmaplim) {
+		return -E_NO_DISK;
+	}
+
+	// now find which digit is set
+	uint32_t j;
+	for (j = 0; j < 32; j++) {
+		if (bitmap[i] & (1 << j)) {
+			break;
+		}
+	}
+	assert(j < 32); // at least 1 digit must be zero
+
+	int blockno = 32 * i + j;
+	if (blockno >= super->s_nblocks) {
+		return -E_NO_DISK;
+	}
+
+	// mark the bit as set
+	bitmap[i] &= ~(1 << j);
+
+	// write back the bitmap to disk
+	int bmblocks = (nb % BLKBITSIZE) ? nb / BLKBITSIZE + 1 : nb / BLKBITSIZE;
+	for (int k = 0; k < bmblocks; k++) {
+		uint32_t *bmaddr = &bitmap[k * (BLKSIZE / 32)];
+		int err;
+		// start writing at block 2
+		if ((err = write_block(2 + k, bmaddr)) < 0) {
+			panic("failed write_block: %x", err);
+		}
+	}
+
+	return blockno;
 }
 
 // Validate the file system bitmap.
@@ -112,7 +163,7 @@ fs_init(void)
 	// Set "bitmap" to the beginning of the first bitmap block.
 	bitmap = diskaddr(2);
 	check_bitmap();
-	
+
 }
 
 // Find the disk block number slot for the 'filebno'th block in file 'f'.
