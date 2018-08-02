@@ -1,7 +1,8 @@
 # Lab 5 notes
 lab link: https://pdos.csail.mit.edu/6.828/2017/labs/lab5/  
 io protection model: https://pdos.csail.mit.edu/6.828/2016/readings/i386/s08_03.htm  
-
+io addresses from bochs: http://bochs.sourceforge.net/techspec/PORTS.LST   
+more about PIO ATA: https://wiki.osdev.org/ATA_PIO_Mode  
 ## Exercise 1
 _Modify env\_create in env.c, so that it gives the file system environment I/O privilege, but never gives that privilege to any other environment._  
 ```C
