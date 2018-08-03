@@ -79,17 +79,6 @@ bc_pgfault(struct UTrapframe *utf)
 		panic("reading free block %08x\n", blockno);
 }
 
-/* inline int */
-/* write_block(int blockno, void *addr) */
-/* { */
-/* 	if (super && blockno >= super->s_nblocks) */
-/* 		panic("bad block number %08x in diskaddr", blockno); */
-/* 	return ide_write((BLKSIZE / SECTSIZE) * blockno, */
-/* 			 ROUNDDOWN(addr, PGSIZE), */
-/* 			 BLKSIZE / SECTSIZE ); */
-/* } */
-
-
 
 // Flush the contents of the block containing VA out to disk if
 // necessary, then clear the PTE_D bit using sys_page_map.
@@ -114,10 +103,8 @@ flush_block(void *addr)
 	}
 
 	int err;
-	if ((err = ide_write((BLKSIZE / SECTSIZE) * blockno,
-			     ROUNDDOWN(addr, PGSIZE),
-			     BLKSIZE / SECTSIZE )) < 0) {
-		panic("ide_write failed");
+	if ((err = write_block(blockno, addr) < 0)) {
+		panic("write_block failed");
 	}
 
 	if ((err = sys_page_map(0,
