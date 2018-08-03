@@ -3,6 +3,17 @@ lab link: https://pdos.csail.mit.edu/6.828/2017/labs/lab5/
 io protection model: https://pdos.csail.mit.edu/6.828/2016/readings/i386/s08_03.htm  
 io addresses from bochs: http://bochs.sourceforge.net/techspec/PORTS.LST   
 more about PIO ATA: https://wiki.osdev.org/ATA_PIO_Mode  
+
+## JOS's FS explanation
+JOS has a file system "server" that handles all the file system operations, including writing directly to disk. The disk itself writes and reads in units of 512 bytes called Sectors. The File system, however, uses a bigger unit which is called a Block (the size of the block must be  divisible by the size of the sector). The block size was chosen to be the same size as a page (4096 bytes).  
+The reason why the block size is the same as the page size is not a coincidence, because we'll be using x86's paging hardware to implement a block cache.
+
+### writing and reading blocks
+The entire disk (assuming the disk is less than 3GB in size) is lazily mapped into memory starting at address `DISKMAP` in the FS server. Lazily mapped means that the actual blocks will be loaded into memory from disk only when we attempt to read them (which is done using the `void* diskaddr(uint32_t blockno)` funtion). If, for example, we want to access block 3, then we'd read the page at address `DISKMAP + 3*PGSIZE` (this works because the size of each page is exactly the size of each block). If our read results in a page fault (which occurs when we read a block for the first time), FS' page fault handler will load 4096 bytes from the disk into a page frame and map it into the corresponding page in the FS server's address space. Subsequent block reads will therefore be read from memory directly, thus functioning like a block cache.  
+
+Block writes will be handled in a similar way: we'll be writing directly to the memory mapped above `DISKMAP`, and then, we'll presist the data using `void flush_block(void *addr)`, which will write it to the disk.
+
+
 ## Exercise 1
 _Modify env\_create in env.c, so that it gives the file system environment I/O privilege, but never gives that privilege to any other environment._  
 ```C
