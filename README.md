@@ -13,6 +13,17 @@ The entire disk (assuming the disk is less than 3GB in size) is lazily mapped in
 
 Block writes will be handled in a similar way: we'll be writing directly to the memory mapped above `DISKMAP`, and then, we'll presist the data using `void flush_block(void *addr)`, which will write it to the disk.
 
+### File system format on disk
+sector 0 is reserved and is not touched by JOS's FS server.  
+Sector 1 stores the super block. There is nothing super in the super block actually. it's just a block that stores the metadata about the file system including: 1) magic number (so we can identify the type of the file system) 2) the number of blocks on the disk 3) the metadata of the root directory-file.
+Sector 2 and up stores bitmap of free blocks (where 1 means free block and 0 means occupied block).   
+The rest of the sectors contain the other file/directory data.
+
+### How is file/directory data represented
+File metadata is represted by `struct File` and is exactly 256 bytes (half a sector or 1/16 of a block). File metadata contains the file name, size, type (dir or regular file), array of 10 block numbers where the actual data is stored, and another block number of a block that stores another 4096/4 = 1024 block numbers. This means that the maximum file size is `10*4096 + 1024*4096 = 4,235,264 bytes` and the maximum overhead of storing the metadata is `256+4096 = 4,352 bytes`.  
+
+The contents of each directory file is just the file metadata of the files that this directory stores (and also a directory file must be a multiple of block size). This means that a directory can store up to `4,235,264/256 = 16,544 files` (another way to calculate it is: `(10+1024)*4096/256`).
+
 
 ## Exercise 1
 _Modify env\_create in env.c, so that it gives the file system environment I/O privilege, but never gives that privilege to any other environment._  
