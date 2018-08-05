@@ -103,7 +103,7 @@ flush_block(void *addr)
 	}
 
 	int err;
-	if ((err = write_block(blockno, addr) < 0)) {
+	if ((err = write_block_to_disk(blockno, addr) < 0)) {
 		panic("write_block failed");
 	}
 

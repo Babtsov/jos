@@ -47,7 +47,7 @@ free_block(uint32_t blockno)
 }
 
 inline int
-write_block(int blockno, void *addr)
+write_block_to_disk(int blockno, void *addr)
 {
 	if (super && blockno >= super->s_nblocks)
 		panic("bad block number %08x in diskaddr", blockno);
@@ -107,7 +107,7 @@ alloc_block(void)
 		uint32_t *bmaddr = &bitmap[k * (BLKSIZE / 32)];
 		int err;
 		// start writing at block 2
-		if ((err = write_block(2 + k, bmaddr)) < 0) {
+		if ((err = write_block_to_disk(2 + k, bmaddr)) < 0) {
 			panic("failed write_block: %x", err);
 		}
 	}

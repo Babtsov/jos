@@ -209,12 +209,25 @@ serve_read(envid_t envid, union Fsipc *ipc)
 {
 	struct Fsreq_read *req = &ipc->read;
 	struct Fsret_read *ret = &ipc->readRet;
+	int err;
 
 	if (debug)
 		cprintf("serve_read %08x %08x %08x\n", envid, req->req_fileid, req->req_n);
 
 	// Lab 5: Your code here:
-	return 0;
+	struct OpenFile *op;
+	if ((err = openfile_lookup(envid, req->req_fileid, &op)) < 0) {
+		return err;
+	}
+
+	ssize_t count = file_read(op->o_file,
+				  ret->ret_buf,
+				  req->req_n,
+				  op->o_fd->fd_offset);
+
+	op->o_fd->fd_offset += count;
+
+	return count;
 }
 
 
