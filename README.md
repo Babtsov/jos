@@ -22,8 +22,40 @@ The rest of the sectors contain the other file/directory data.
 ### How is file/directory data represented
 File metadata is represted by `struct File` and is exactly 256 bytes (half a sector or 1/16 of a block). File metadata contains the file name, size, type (dir or regular file), array of 10 block numbers where the actual data is stored, and another block number of a block that stores another 4096/4 = 1024 block numbers. This means that the maximum file size is `10*4096 + 1024*4096 = 4,235,264 bytes` and the maximum overhead of storing the metadata is `256+4096 = 4,352 bytes`.  
 
-The contents of each directory file is just the file metadata of the files that this directory stores (and also a directory file must be a multiple of block size). This means that a directory can store up to `4,235,264/256 = 16,544 files` (another way to calculate it is: `(10+1024)*4096/256`).
+The contents of each directory file is just the file metadata (`struct File`) of the files that this directory stores (and also a directory file must be a multiple of block size). This means that a directory can store up to `4,235,264/256 = 16,544 files` (another way to calculate it is: `(10+1024)*4096/256`).
 
+### How the user reads and writes to files
+In order to read and write files, the user space environments need to send an IPC to the file server for the various file operations (such as read, write, etc). However, in order to support more than just a file system (but also pipes and "device files"), user space programs use the file descriptor abstraction layer (located in `lib/fd.c`). A "file descriptor" represents a "handle" on an open file, and is implemented by `struct Fd`. Because we'd like to share the data of `strcut Fd` between the user environments and the file server, Each `struct Fd` is located on its own page. It is also worth mentioning that each environment has a limit on how many file descriptors it can have open (`MAXFD`).  
+
+#### opening a file
+In order to start reading from or writing to a file, we first need to "open" the file. Opening the file means that we obtain a file descriptor, and then later operations (such as reading and writing) are performed on that file descriptor. the `int open(const char *path, int mode)` function is available in `lib/file.c`, and this is one of the only few public functions exported by this file (the rest of them are private functions).  
+Opening a file allocates a slot file descriptor in the user environment, and then sends an IPC request to the file server to open the file. The file server itself has a limit on how many files it can have open `MAXOPEN` in the system. If that limit is not exceeded, then the file server traverses the file system (reading from the block cache or from the disk directly), allocates a page for the file descriptor, and sends the `struct Fd` page that the user environment will map into the file descritor allocated slot. 
+
+#### performing reads and writes
+The functions read and write accept a file descriptor, but they also need to know which device to actually read from or to write to. That's why each file descriptor (`struct Fd`) contains information about which device it refers to. For example, when we used the "open" call to talk to the File Service so it can open a file, the File Service was the one that allocated the `struct Fd` and also set its device to "dev_file". This is how when we read from or write to a file using the `read` or `write` functions, the functions know which "device" to dispatch to (in the File service case, the function that gets dispatched for reading is `devfile_read`).
+
+Here is an illustration of the control flow from the lab manual:
+```
+      Regular env           FS env
+   +---------------+   +---------------+
+   |      read     |   |   file_read   |
+   |   (lib/fd.c)  |   |   (fs/fs.c)   |
+...|.......|.......|...|.......^.......|...............
+   |       v       |   |       |       | RPC mechanism
+   |  devfile_read |   |  serve_read   |
+   |  (lib/file.c) |   |  (fs/serv.c)  |
+   |       |       |   |       ^       |
+   |       v       |   |       |       |
+   |     fsipc     |   |     serve     |
+   |  (lib/file.c) |   |  (fs/serv.c)  |
+   |       |       |   |       ^       |
+   |       v       |   |       |       |
+   |   ipc_send    |   |   ipc_recv    |
+   |       |       |   |       ^       |
+   +-------|-------+   +-------|-------+
+           |                   |
+           +-------------------+
+```
 
 ## Exercise 1
 _Modify env\_create in env.c, so that it gives the file system environment I/O privilege, but never gives that privilege to any other environment._  
