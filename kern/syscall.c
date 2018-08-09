@@ -152,11 +152,10 @@ sys_env_set_trapframe(envid_t envid, struct Trapframe *tf)
 	// enable interrupts
 	env->env_tf.tf_eflags |= FL_IF;
 
-	// set user privilage level and stack pointer
+	// set user privilage level
 	env->env_tf.tf_ds = GD_UD | 3;
 	env->env_tf.tf_es = GD_UD | 3;
 	env->env_tf.tf_ss = GD_UD | 3;
-	env->env_tf.tf_esp = USTACKTOP;
 	env->env_tf.tf_cs = GD_UT | 3;
 
 

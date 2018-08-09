@@ -76,7 +76,8 @@ duppage(envid_t envid, unsigned pn)
 	int r;
 	pte_t pte = uvpt[pn];
 
-	if (!(pte & PTE_W) && !(pte & PTE_COW)) {
+	// map page directly if not writable or if it's set as shared page
+	if ((!(pte & PTE_W) && !(pte & PTE_COW)) || (pte & PTE_SHARE)) {
 		if ((r = sys_page_map(thisenv->env_id,
 				      (void *)(pn * PGSIZE),
 				      envid,

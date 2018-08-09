@@ -302,6 +302,29 @@ static int
 copy_shared_pages(envid_t child)
 {
 	// LAB 5: Your code here.
+	int r;
+	bool is_below_ulim = true;
+	for (int i = 0; is_below_ulim && i < NPDENTRIES ; i++) {
+		if (!(uvpd[i] & PTE_P)) {
+			continue;
+		}
+		for (int j = 0; is_below_ulim && j < NPTENTRIES; j++) {
+			unsigned pn = i * NPTENTRIES + j;
+			pte_t pte = uvpt[pn];
+			if (pn >= (UTOP >> PGSHIFT)) {
+				is_below_ulim = false;
+			} else if (pte & PTE_SHARE) {
+				if ((r = sys_page_map(0,
+						      (void *)(pn * PGSIZE),
+						      child,
+						      (void *)(pn * PGSIZE),
+						      pte & PTE_SYSCALL)) < 0) {
+					return r;
+				}
+			}
+		}
+	}
+
 	return 0;
 }
 
