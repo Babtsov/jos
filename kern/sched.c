@@ -27,10 +27,11 @@ sched_yield(void)
 	// below to halt the cpu.
 	// LAB 4: Your code here.
 
-	int index = curenv ? ENVX(curenv->env_id) + 1 : 0;
+	int begin = curenv ? ENVX(curenv->env_id) + 1 : 0;
+	int index = begin;
 	bool found = false;
 	for (int i = 0; i < NENV; i++) {
-		index = (index + i) % NENV;
+		index = (begin + i) % NENV;
 		if (envs[index].env_status == ENV_RUNNABLE) {
 			found = true;
 			break;
