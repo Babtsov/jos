@@ -106,6 +106,7 @@ trap_init(void)
 	SETGATE(idt[IRQ_OFFSET + IRQ_TIMER], false, GD_KT, irq_timer, 0);
 	SETGATE(idt[IRQ_OFFSET + IRQ_KBD], false, GD_KT, irq_kbd, 0);
 	SETGATE(idt[IRQ_OFFSET + IRQ_SERIAL], false, GD_KT, irq_serial, 0);
+	SETGATE(idt[IRQ_OFFSET + IRQ_SPURIOUS], false, GD_KT, irq_spurious, 0);
 
 	// ensure bootstrap cpu gets initialized too
 	trap_init_percpu();
@@ -255,7 +256,7 @@ trap_dispatch(struct Trapframe *tf)
 		return;
 	}
 	if (tf->tf_trapno == IRQ_OFFSET + IRQ_SERIAL) {
-		kbd_intr();
+		serial_intr();
 		return;
 	}
 

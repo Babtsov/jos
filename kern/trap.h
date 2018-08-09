@@ -51,6 +51,7 @@ void t_default();
 void irq_timer();
 void irq_kbd();
 void irq_serial();
+void irq_spurious();
 void irq_error();
 
 #endif /* JOS_KERN_TRAP_H */
