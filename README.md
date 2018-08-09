@@ -57,6 +57,10 @@ Here is an illustration of the control flow from the lab manual:
            +-------------------+
 ```
 
+## The JOS shell
+After the kernel finishes initializing various subsystems (such as the memory subsystem and the multiprocessor subsystem), and various kernel data strctures (such as user environment management), it loads the code of, and creates an environment for the File Server, whose executable is embedded in the kernel image itself. Before running the scheduler and transferring to use space, the kernel also does a similar initialization and creation of an environment called `icode`, whose responsibility will evventually be to call `init`.  
+By the time icode starts, the File Server is already available, which makes it possible for icode to use the file system (notice that this is in contrast to the initialization function `i386_init` in the kernel itself, which loads the `icode` and `fs` executables from RAM and doesn't do any disk access). `icode` opens the `/motd` and prints it out to the screen. Notice that at this point, `icode` is not using file descriptor 1 (stdout) for printing because the console has not yet been configured to be associated with fd 0 (for input) and fd 1 (for output). The last thing `icode` is doing before exiting is to spawn `init`.  
+
 ## Exercise 1
 _Modify env\_create in env.c, so that it gives the file system environment I/O privilege, but never gives that privilege to any other environment._  
 ```C
@@ -81,6 +85,7 @@ env_create(uint8_t *binary, enum EnvType type)
 _Do you have to do anything else to ensure that this I/O privilege setting is saved and restored properly when you subsequently switch from one environment to another? Why?_  
 
 No, this is because the  I/O privilege setting is part of the eflags register, which is saved seperately for each enviornment. So if, for example, we switch from an i/o privilaged environment to a non i/o provilaged one, the eflags register will get reloaded and the new, non-privilaged environment won't be able to access the i/o devices.
+
 
 ### Memory map
 ```
