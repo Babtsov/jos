@@ -86,6 +86,7 @@ _Do you have to do anything else to ensure that this I/O privilege setting is sa
 
 No, this is because the  I/O privilege setting is part of the eflags register, which is saved seperately for each enviornment. So if, for example, we switch from an i/o privilaged environment to a non i/o provilaged one, the eflags register will get reloaded and the new, non-privilaged environment won't be able to access the i/o devices.
 
+## _see answers to the other exercises in the src_
 
 ### Memory map
 ```
