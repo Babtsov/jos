@@ -33,9 +33,10 @@ i386_init(void)
 	// Initialize the console.
 	// Can't call cprintf until after we do this!
 	cons_init();
-
+	cprintf("normal test here\n");
+	cprintf(KRED "judge " KGRN "me\n");
+	cprintf("free " KNRM "like " KBLU "nobody\n" KNRM);
 	cprintf("6828 decimal is %o octal!\n", 6828);
-
 	// Lab 2 memory management initialization functions
 	mem_init();
 
@@ -55,7 +56,9 @@ i386_init(void)
 	pci_init();
 
 	// Acquire the big kernel lock before waking up APs
-	// Your code here:
+	// BSP will get to schedule first environment while
+	// other processors will wait for their turn
+	lock_kernel();
 
 	// Starting non-boot CPUs
 	boot_aps();
@@ -74,10 +77,13 @@ i386_init(void)
 #else
 	// Touch all you want.
 	ENV_CREATE(user_icode, ENV_TYPE_USER);
+//	ENV_CREATE(user_testshell, ENV_TYPE_USER);
 #endif // TEST*
 
 	// Should not be necessary - drains keyboard because interrupt has given up.
 	kbd_intr();
+
+      	cprintf("All initializations are done. dispatching...\n");
 
 	// Schedule and run the first user environment!
 	sched_yield();
@@ -133,9 +139,8 @@ mp_main(void)
 	// only one CPU can enter the scheduler at a time!
 	//
 	// Your code here:
-
-	// Remove this after you finish Exercise 6
-	for (;;);
+	lock_kernel();
+	sched_yield();
 }
 
 /*

@@ -117,6 +117,18 @@ strfind(const char *s, char c)
 	return (char *) s;
 }
 
+// Attempts to match prefix to s. If found, returns the index after the prefix
+// or a NULL if prefix not found.
+const char *
+prefix_find(const char *s, const char *prefix)
+{
+	for (; *s && *prefix; s++, prefix++) {
+		if (*s != *prefix)
+			return NULL;
+	}
+	return s;
+}
+
 #if ASM
 void *
 memset(void *v, int c, size_t n)

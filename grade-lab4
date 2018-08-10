@@ -134,7 +134,7 @@ def test_spin():
 
 @test(5)
 def test_stresssched():
-    r.user_test("stresssched", make_args=["CPUS=4"])
+    r.user_test("stresssched", make_args=["CPUS=8"], timeout=90)
     r.match(".000010... stresssched on CPU 0",
             ".000010... stresssched on CPU 1",
             ".000010... stresssched on CPU 2",

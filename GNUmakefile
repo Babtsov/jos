@@ -83,7 +83,7 @@ PERL	:= perl
 # Compiler flags
 # -fno-builtin is required to avoid refs to undefined functions in the kernel.
 # Only optimize to -O1 to discourage inlining, which complicates backtraces.
-CFLAGS := $(CFLAGS) $(DEFS) $(LABDEFS) -O1 -fno-builtin -I$(TOP) -MD
+CFLAGS := $(CFLAGS) $(DEFS) $(LABDEFS) -O0 -fno-builtin -I$(TOP) -MD
 CFLAGS += -fno-omit-frame-pointer
 CFLAGS += -std=gnu99
 CFLAGS += -static
@@ -168,7 +168,8 @@ QEMUOPTS += $(QEMUEXTRA)
 gdb:
 	gdb -n -x .gdbinit
 
-pre-qemu: .gdbinit
+
+pre-qemu: .gdbinit tags
 #	QEMU doesn't truncate the pcap file.  Work around this.
 	@rm -f qemu.pcap
 
@@ -317,6 +318,7 @@ myapi.key:
 #handin-prep:
 #	@./handin-prep
 
+
 # For test runs
 prep-net_%: override INIT_CFLAGS+=-DTEST_NO_NS
 
@@ -351,6 +353,10 @@ telnet-80:
 
 telnet-7:
 	telnet localhost $(PORT7)
+
+tags:
+	find . -name "*.[chS]" -print | xargs etags
+
 
 # This magic automatically generates makefile dependencies
 # for header files included from C source files we compile,

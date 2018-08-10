@@ -43,6 +43,7 @@ void	fs_sync(void);
 /* int	map_block(uint32_t); */
 bool	block_is_free(uint32_t blockno);
 int	alloc_block(void);
+int     write_block_to_disk(int blockno, void *addr);
 
 /* test.c */
 void	fs_test(void);

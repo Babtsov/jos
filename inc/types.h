@@ -72,4 +72,7 @@ typedef int32_t off_t;
 // Return the offset of 'member' relative to the beginning of a struct type
 #define offsetof(type, member)  ((size_t) (&((type*)0)->member))
 
+// ceil(x/y) where x and y are integers
+#define DIVCEIL(x, y) (((x) % (y)) ? (x) / (y) + 1 : (x) / (y))
+
 #endif /* !JOS_INC_TYPES_H */

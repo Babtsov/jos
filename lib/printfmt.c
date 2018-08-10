@@ -88,20 +88,79 @@ getint(va_list *ap, int lflag)
 // Main function to format and print a string.
 void printfmt(void (*putch)(int, void*), void *putdat, const char *fmt, ...);
 
+// attempt to decode unsigned integer and
+// returns the number of digits decoded
+int decode_uint_prefix(int *decoded, const char *str) {
+	int result = 0, digitcount = 0;
+	char c;
+	while ((c = *str) != '\0') {
+		if (c < '0' || c > '9')
+			break;
+		result = 10*result + (c -'0');
+		digitcount++;
+		str++;
+	}
+	*decoded = result;
+	return digitcount;
+}
+
+static enum pcolor decode_color(int* sz, const char *str) {
+	if (str[0] != '[')
+		return INVALID;
+	str += 1;
+
+	int offset = 1;
+	int code = 0;
+	int digitcount = decode_uint_prefix(&code, str);
+	if (digitcount == 0)
+		return INVALID;
+
+	offset += digitcount;
+	str += digitcount;
+
+	if (*str != 'm')
+		return INVALID;
+	offset++;
+	*sz = offset;
+
+	switch (code) {
+	case 0: return WHITE;
+	case 31: return RED;
+	case 32: return GREEN;
+	case 34: return BLUE;
+	}
+
+	return INVALID;
+}
+
+//extern enum pcolor ccolor;
+
 void
 vprintfmt(void (*putch)(int, void*), void *putdat, const char *fmt, va_list ap)
 {
 	register const char *p;
-	register int ch, err;
+	int ch, err;
 	unsigned long long num;
 	int base, lflag, width, precision, altflag;
 	char padc;
 
 	while (1) {
-		while ((ch = *(unsigned char *) fmt++) != '%') {
-			if (ch == '\0')
-				return;
+		ch = *(unsigned char *) fmt++;
+		if (ch == '\0') {
+			return;
+		} else if (ch != '%' && ch != '\x1B') {
 			putch(ch, putdat);
+			continue;
+		} else if ( ch == '\x1B') {
+			int offset = 0;
+			enum pcolor c = decode_color(&offset, fmt);
+			if (c != INVALID) {
+//				ccolor = c;
+				fmt += offset;
+			} else {
+				putch(ch, putdat);
+			}
+			continue;
 		}
 
 		// Process a %-escape sequence
@@ -214,11 +273,9 @@ vprintfmt(void (*putch)(int, void*), void *putdat, const char *fmt, va_list ap)
 
 		// (unsigned) octal
 		case 'o':
-			// Replace this with your code.
-			putch('X', putdat);
-			putch('X', putdat);
-			putch('X', putdat);
-			break;
+			num = getuint(&ap, lflag);
+			base = 8;
+			goto number;
 
 		// pointer
 		case 'p':

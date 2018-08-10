@@ -12,8 +12,12 @@ struct Trapframe;
 void monitor(struct Trapframe *tf);
 
 // Functions implementing monitor commands.
+int mon_quit(int argc, char **argv, struct Trapframe *tf);
 int mon_help(int argc, char **argv, struct Trapframe *tf);
 int mon_kerninfo(int argc, char **argv, struct Trapframe *tf);
 int mon_backtrace(int argc, char **argv, struct Trapframe *tf);
-
+int mon_vaddrinfo(int argc, char **argv, struct Trapframe *tf);
+int mon_pgdir(int argc, char **argv, struct Trapframe *tf);
+int mon_vminfo(int argc, char **argv, struct Trapframe *tf);
+int mon_envinfo(int argc, char **argv, struct Trapframe *tf);
 #endif	// !JOS_KERN_MONITOR_H
