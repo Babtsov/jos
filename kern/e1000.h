@@ -2,6 +2,8 @@
 #define JOS_KERN_E1000_H
 #include <kern/pci.h>
 
+#define ETH_MAX_PACKET_SIZE 1518
+
 int e1000_attach(struct pci_func *pcif);
 int tx_packet(char *buf, int size);
 

@@ -1,10 +1,22 @@
 #include <kern/e1000.h>
 #include <kern/pci.h>
 #include <kern/pmap.h>
+
 #include <inc/stdio.h>
 #include <inc/string.h>
+#include <inc/error.h>
 
 // LAB 6: Your driver code here
+
+// Notes:
+// The hardware always consumes descriptors from the head and moves the head
+// pointer, while the driver always add descriptors to the tail and moves the
+// tail pointer.
+// Transmit Descriptor Tail register(TDT) is the register that
+// holds a value which is an offset from the base, and indicates
+// the location beyond the last descriptor hardware can process. This is the
+// location where software writes the first new descriptor.
+
 static volatile uint32_t *nic;
 
 #define NIC_REG(offset) (nic[offset / 4])
@@ -12,7 +24,7 @@ static volatile uint32_t *nic;
 
 struct eth_packet_buffer
 {
-	char data[1518];
+	char data[ETH_MAX_PACKET_SIZE];
 };
 
 struct eth_packet_buffer tx_queue_data[TX_QUEUE_SIZE];
@@ -48,31 +60,23 @@ int e1000_attach(struct pci_func *pcif)
 	NIC_REG(E1000_TIPG) = 10; // page 313
 
 	cprintf("tx_queue_base: %x\n", tx_queue_desc);
+
 	cprintf("trying to transmit a packet\n");
 	char *data = "Here is some test data to transmit through the NIC";
 	tx_packet(data, strlen(data));
+
 	return 0;
 }
 
-// The hardware always consumes descriptors from the head and moves the head
-// pointer, while the driver always add descriptors to the tail and moves the
-//tail pointer
-
-// Transmit Descriptor Tail register(TDT) is the register that
-// holds a value which is an offset from the base, and indicates
-// the location beyond the last descriptor hardware can process. This is the
-// location where software writes the first new descriptor.
-
-
 int tx_packet(char *buf, int size)
 {
-	assert(size <= 1518);
+	assert(size <= ETH_MAX_PACKET_SIZE);
 	int tail_indx = NIC_REG(E1000_TDT);
 	if (!(tx_queue_desc[tail_indx].status & E1000_TXD_STAT_DD)) {
-		return -1; // can't transmit
+		return -E_NIC_BUSY; // queue is full
 	}
 	tx_queue_desc[tail_indx].status &= ~E1000_TXD_STAT_DD;
-	memmove(&tx_queue_data[tail_indx], buf, size);
+	memmove(&tx_queue_data[tail_indx].data, buf, size);
 	tx_queue_desc[tail_indx].length = size;
 	// update the TDT to "submit" this packet for transmission
 	NIC_REG(E1000_TDT) = (tail_indx + 1) % TX_QUEUE_SIZE;

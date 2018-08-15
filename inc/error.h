@@ -26,6 +26,8 @@ enum {
 	E_NOT_EXEC	,	// File not a valid executable
 	E_NOT_SUPP	,	// Operation not supported
 
+	// Network specific errors
+	E_NIC_BUSY       ,      // NIC is busy processing other packets
 	MAXERROR
 };
 
