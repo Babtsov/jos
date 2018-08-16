@@ -37,6 +37,13 @@ enum {
 	NSREQ_TIMER,
 };
 
+// Definitions of responses to IPC messeges
+enum {
+	NRES_OK = 0,
+	NRES_BUSY,
+	NRES_INVALID_REQ,
+};
+
 union Nsipc {
 	struct Nsreq_accept {
 		int req_s;

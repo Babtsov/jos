@@ -34,7 +34,6 @@ int e1000_attach(struct pci_func *pcif)
 {
 	pci_func_enable(pcif);
 	nic = mmio_map_region(pcif->reg_base[0], pcif->reg_size[0]);
-	cprintf("device status register: %x\n", NIC_REG(E1000_STATUS));
 
 	// Transmit Initialization
 	struct PageInfo *p = page_alloc(ALLOC_ZERO);
@@ -58,12 +57,6 @@ int e1000_attach(struct pci_func *pcif)
 	NIC_REG(E1000_TCTL) |= (E1000_TCTL_EN | E1000_TCTL_PSP);
 	NIC_REG(E1000_TCTL) |= E1000_TCTL_COLD & ( 0x40 << 12);  // set the cold
 	NIC_REG(E1000_TIPG) = 10; // page 313
-
-	cprintf("tx_queue_base: %x\n", tx_queue_desc);
-
-	cprintf("trying to transmit a packet\n");
-	char *data = "Here is some test data to transmit through the NIC";
-	tx_packet(data, strlen(data));
 
 	return 0;
 }
