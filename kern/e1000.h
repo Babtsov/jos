@@ -7,6 +7,7 @@
 
 int e1000_attach(struct pci_func *pcif);
 int tx_packet(char *buf, int size);
+int rx_packet(char *buf, int *size);
 
 // copy pasta from QEMU's e1000_hw.h header
 

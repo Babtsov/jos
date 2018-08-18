@@ -110,3 +110,17 @@ int tx_packet(char *buf, int size)
 	NIC_REG(E1000_TDT) = (tail_indx + 1) % TX_QUEUE_SIZE;
 	return 0;
 }
+
+int rx_packet(char *buf, int *size)
+{
+	int next_indx = (NIC_REG(E1000_RDT) + 1) % RX_QUEUE_SIZE;
+	if (!(rx_queue_desc[next_indx].status & E1000_TXD_STAT_DD)) {
+		return -E_RX_EMPTY; // queue is empty
+	}
+	rx_queue_desc[next_indx].status &= ~E1000_TXD_STAT_DD;
+	int rx_size = rx_queue_desc[next_indx].length;
+	memmove(buf, rx_queue_data[next_indx].data, rx_size);
+	*size = rx_size;
+	NIC_REG(E1000_RDT) = next_indx;
+	return 0;
+}

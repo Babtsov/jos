@@ -28,6 +28,7 @@ enum {
 
 	// Network specific errors
 	E_NIC_BUSY       ,      // NIC is busy processing other packets
+	E_RX_EMPTY       ,      // NIC receive queue is empty
 	MAXERROR
 };
 
