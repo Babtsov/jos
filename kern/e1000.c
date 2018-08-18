@@ -12,23 +12,33 @@
 // The hardware always consumes descriptors from the head and moves the head
 // pointer, while the driver always add descriptors to the tail and moves the
 // tail pointer.
+// Transmit:
 // Transmit Descriptor Tail register(TDT) is the register that
 // holds a value which is an offset from the base, and indicates
 // the location beyond the last descriptor hardware can process. This is the
-// location where software writes the first new descriptor.
-
+// location where software writes the first new descriptor. After the software
+// wrote the data. it clears the DD flag to mark this slot as unprocessed.
+// Receive:
+// The software reads a descriptor from the (tail+1)%size and then marks it as
+// free by clearing the DD flag and incrementing the tail pointer
 static volatile uint32_t *nic;
 
 #define NIC_REG(offset) (nic[offset / 4])
 #define TX_QUEUE_SIZE 64
+#define RX_QUEUE_SIZE 128
 
 struct eth_packet_buffer
 {
-	char data[ETH_MAX_PACKET_SIZE];
+	char data[DATA_PACKET_BUFFER_SIZE];
 };
 
+// transmit buffers
 struct eth_packet_buffer tx_queue_data[TX_QUEUE_SIZE];
 struct e1000_tx_desc *tx_queue_desc;
+
+// receive buffers
+struct eth_packet_buffer rx_queue_data[RX_QUEUE_SIZE];
+struct e1000_rx_desc *rx_queue_desc;
 
 int e1000_attach(struct pci_func *pcif)
 {
@@ -58,6 +68,31 @@ int e1000_attach(struct pci_func *pcif)
 	NIC_REG(E1000_TCTL) |= E1000_TCTL_COLD & ( 0x40 << 12);  // set the cold
 	NIC_REG(E1000_TIPG) = 10; // page 313
 
+	// Receive initialization
+	// MAC address 52:54:00:12:34:56
+	NIC_REG(E1000_RAL) = 0x12005452;
+	*(uint16_t *)&NIC_REG(E1000_RAH) = 0x5634;
+	NIC_REG(E1000_RAH) |= E1000_RAH_AV; // set the address valid bit
+	// MTA initialized to 0b
+	NIC_REG(E1000_MTA) = 0;
+	// Allocate memory for the receive descriptor list & init registers
+	struct PageInfo *rx_desc_pg = page_alloc(ALLOC_ZERO);
+	rx_queue_desc = page2kva(rx_desc_pg);
+	physaddr_t rx_desc_base = page2pa(rx_desc_pg);
+	NIC_REG(E1000_RDBAL) = rx_desc_base;
+	NIC_REG(E1000_RDBAH) = 0;
+	NIC_REG(E1000_RDLEN) = RX_QUEUE_SIZE * sizeof(struct e1000_rx_desc);
+
+	// initialize head and tail such that (tail + 1) % size = head
+	NIC_REG(E1000_RDH) = 0;
+	NIC_REG(E1000_RDT) = RX_QUEUE_SIZE - 1;
+	for (int i = 0; i < RX_QUEUE_SIZE; i++) {
+		rx_queue_desc[i].addr = (uint64_t)PADDR(&rx_queue_data[i]);
+		// clear Descriptor Done so we know we are not allowed to read it
+		rx_queue_desc[i].status &= ~E1000_RXD_STAT_DD;
+	}
+	// enable and strip CRC
+	NIC_REG(E1000_RCTL) |= E1000_RCTL_EN | E1000_RCTL_SECRC;
 	return 0;
 }
 

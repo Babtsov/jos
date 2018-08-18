@@ -3,6 +3,7 @@
 #include <kern/pci.h>
 
 #define ETH_MAX_PACKET_SIZE 1518
+#define DATA_PACKET_BUFFER_SIZE 2048
 
 int e1000_attach(struct pci_func *pcif);
 int tx_packet(char *buf, int size);
@@ -187,7 +188,8 @@ int tx_packet(char *buf, int size);
 #define E1000_RXCSUM   0x05000  /* RX Checksum Control - RW */
 #define E1000_RFCTL    0x05008  /* Receive Filter Control*/
 #define E1000_MTA      0x05200  /* Multicast Table Array - RW Array */
-#define E1000_RA       0x05400  /* Receive Address - RW Array */
+#define E1000_RAL      0x05400  /* Receive Address Low - RW Array */
+#define E1000_RAH      0x05404  /* Receive Address High - RW Array */
 #define E1000_VFTA     0x05600  /* VLAN Filter Table Array - RW Array */
 #define E1000_WUC      0x05800  /* Wakeup Control - RW */
 #define E1000_WUFC     0x05808  /* Wakeup Filter Control - RW */
@@ -648,7 +650,7 @@ struct e1000_tx_desc {
 
 /* Receive Descriptor */
 struct e1000_rx_desc {
-    uint64_t buffer_addr; /* Address of the descriptor's data buffer */
+    uint64_t addr; /* Address of the descriptor's data buffer */
     uint16_t length;     /* Length of data DMAed into data buffer */
     uint16_t csum;       /* Packet checksum */
     uint8_t status;      /* Descriptor status */
