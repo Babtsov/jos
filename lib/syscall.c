@@ -31,8 +31,8 @@ syscall(int num, int check, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 		       "S" (a5)
 		     : "cc", "memory");
 
-	if(check && ret > 0)
-		panic("syscall %d returned %d (> 0)", num, ret);
+	if(check && ret < 0)
+		panic("syscall %d returned %d (< 0)", num, ret);
 
 	return ret;
 }
@@ -130,7 +130,7 @@ sys_transmit_packet(char *buf, int size)
 }
 
 int
-sys_receive_packet(char *buf, int *size)
+sys_receive_packet(char *buf, int size)
 {
 	return syscall(SYS_receive_packet, 0, (uint32_t)buf, (uint32_t)size, 0, 0, 0);
 }

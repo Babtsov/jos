@@ -30,9 +30,9 @@ pgfault(struct UTrapframe *utf)
 	pte_t pte = uvpt[(uintptr_t)addr >> PGSHIFT];
 
 	if (!(err & 2)) {
-		panic("pgfault was not a write. err: %x", err);
+		panic("pgfault was not a write. addr: %x err: %x", addr, err);
 	} else if (!(pte & PTE_COW)) {
-		panic("pgfault is not copy on write");
+		panic("pgfault is not copy on write. addr: %x", addr);
 	}
 
 	// Allocate a new page, map it at a temporary location (PFTEMP),

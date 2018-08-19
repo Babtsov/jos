@@ -453,16 +453,13 @@ sys_transmit_packet(char *buf, int size)
 	return tx_packet(buf, size);
 }
 
-// receive a packet.
+// receive a packet. store up to `size` bytes into buffer `buf`
 // returns -E_RX_EMPTY if queue is empty and there is nothing to receive
+// returns the amount of bytes read
 static int
-sys_receive_packet(char *buf, int *size)
+sys_receive_packet(char *buf, int size)
 {
-	if (size == NULL) {
-		cprintf("sys_receive_packet: null size\n");
-		env_destroy(curenv);
-	}
-	user_mem_assert(curenv, buf, *size, PTE_U | PTE_P);
+	user_mem_assert(curenv, buf, size, PTE_U | PTE_P | PTE_W);
 	return rx_packet(buf, size);
 }
 
@@ -512,7 +509,7 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 	case SYS_transmit_packet:
 		return sys_transmit_packet((char *)a1, (int)a2);
 	case SYS_receive_packet:
-		return sys_receive_packet((char *)a1, (int *)a2);
+		return sys_receive_packet((char *)a1, (int)a2);
 	default:
 		return -E_INVAL;
 	}

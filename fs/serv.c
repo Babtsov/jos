@@ -336,7 +336,7 @@ serve(void)
 
 		// All requests must contain an argument page
 		if (!(perm & PTE_P)) {
-			cprintf("Invalid request from %08x: no argument page\n",
+			cprintf("FS: Invalid request from %08x: no argument page\n",
 				whom);
 			continue; // just leave it hanging...
 		}

@@ -284,7 +284,7 @@ serve(void) {
 
 		// All remaining requests must contain an argument page
 		if (!(perm & PTE_P)) {
-			cprintf("Invalid request from %08x: no argument page\n", whom);
+			cprintf("Net: Invalid request from %08x: no argument page\n", whom);
 			continue; // just leave it hanging...
 		}
 

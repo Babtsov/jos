@@ -4,7 +4,11 @@
 # error "This is a JOS kernel header; user programs should not #include it"
 #endif
 
+#include <inc/memlayout.h>
+
 struct Trapframe;
+
+void print_pfields(pte_t pte);
 
 // Activate the kernel monitor,
 // optionally providing a trap frame indicating the current state

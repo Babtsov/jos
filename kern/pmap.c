@@ -11,6 +11,7 @@
 #include <kern/kclock.h>
 #include <kern/env.h>
 #include <kern/cpu.h>
+#include <kern/monitor.h>
 
 // These variables are set by i386_detect_memory()
 size_t npages;			// Amount of physical memory (in pages)
@@ -627,6 +628,7 @@ mmio_map_region(physaddr_t pa, size_t size)
 }
 
 static uintptr_t user_mem_check_addr;
+static int user_mem_perm;
 
 //
 // Check that an environment is allowed to access the range of memory
@@ -654,8 +656,9 @@ user_mem_check(struct Env *env, const void *va, size_t len, int perm)
 	for (char *c = addr; c < addr + len; c = ROUNDDOWN(c + PGSIZE, PGSIZE)) {
 		pte_t *pte = NULL;
 		struct PageInfo *p = page_lookup(env->env_pgdir, (void*)c, &pte);
-		if (!p || !(*pte & perm) || (uintptr_t)c >= ULIM) {
+		if (!p || (*pte & perm) != perm || (uintptr_t)c >= ULIM) {
 			user_mem_check_addr = (uintptr_t)c;
+			user_mem_perm = PTE_PERM(*pte);
 			return -E_FAULT;
 		}
 	}
@@ -674,7 +677,12 @@ user_mem_assert(struct Env *env, const void *va, size_t len, int perm)
 {
 	if (user_mem_check(env, va, len, perm | PTE_U) < 0) {
 		cprintf("[%08x] user_mem_check assertion failure for "
-			"va %08x\n", env->env_id, user_mem_check_addr);
+			"va %08x ", env->env_id, user_mem_check_addr);
+		cprintf("actual pg perm: ");
+		print_pfields(user_mem_perm);
+		cprintf("expected pg perm: ");
+		print_pfields(perm);
+		cprintf("\n");
 		env_destroy(env);	// may not return
 	}
 }
