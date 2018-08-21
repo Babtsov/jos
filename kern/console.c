@@ -9,6 +9,8 @@
 #include <kern/console.h>
 #include <kern/trap.h>
 #include <kern/picirq.h>
+#include <kern/monitor.h>
+#include <kern/env.h>
 
 static void cons_intr(int (*proc)(void));
 static void cons_putc(int c);
@@ -362,7 +364,6 @@ kbd_proc_data(void)
 		cprintf("Rebooting!\n");
 		outb(0x92, 0x3); // courtesy of Chris Frost
 	}
-
 	return c;
 }
 
@@ -395,6 +396,19 @@ static struct {
 	uint32_t wpos;
 } cons;
 
+
+#define CTRLC 0x3
+static void
+handle_ctrl_c(void)
+{
+	cprintf("[CPU: %x] Suspended environment ", cpunum());
+	if (!curenv) {
+		cprintf("[null]\n");
+	} else {
+		cprintf("[%x]\n", curenv->env_id);
+	}
+	monitor(NULL);
+}
 // called by device interrupt routines to feed input characters
 // into the circular console input buffer.
 static void
@@ -405,6 +419,10 @@ cons_intr(int (*proc)(void))
 	while ((c = (*proc)()) != -1) {
 		if (c == 0)
 			continue;
+		if (c == CTRLC) {
+			handle_ctrl_c();
+			return;
+		}
 		cons.buf[cons.wpos++] = c;
 		if (cons.wpos == CONSBUFSIZE)
 			cons.wpos = 0;
