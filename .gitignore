@@ -12,7 +12,6 @@
 /qemu.log
 /gradelib.pyc
 /lab*-handin.tar.gz
-/lab?/
 /sol?/
 /myapi.key
 /.suf
