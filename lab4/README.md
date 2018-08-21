@@ -231,24 +231,25 @@ sched_yield(void)
         // below to halt the cpu.
         // LAB 4: Your code here.
 
-        int index = curenv ? ENVX(curenv->env_id) + 1 : 0;
-        bool found = false;
-        for (int i = 0; i < NENV; i++) {
-                index = (index + i) % NENV;
-                if (envs[index].env_status == ENV_RUNNABLE) {
-                        found = true;
-                        break;
-                }
-        }
+	int begin = curenv ? ENVX(curenv->env_id) + 1 : 0;
+	int index = begin;
+	bool found = false;
+	for (int i = 0; i < NENV; i++) {
+		index = (begin + i) % NENV;
+		if (envs[index].env_status == ENV_RUNNABLE) {
+			found = true;
+			break;
+		}
+	}
 
-        if (found) {
-                env_run(&envs[index]);
-        } else if (curenv && curenv->env_status == ENV_RUNNING) {
-                env_run(curenv);
-        } else {
-                sched_halt();
-        }
-        panic("sched_yield attempted to return");
+	if (found) {
+		env_run(&envs[index]);
+	} else if (curenv && curenv->env_status == ENV_RUNNING) {
+		env_run(curenv);
+	} else {
+		sched_halt();
+	}
+	panic("sched_yield attempted to return");
 }
 ```
 _In your implementation of env_run() you should have called lcr3(). Before and after the call to lcr3(), your code makes references (at least it should) to the variable e, the argument to env_run. Upon loading the %cr3 register, the addressing context used by the MMU is instantly changed. But a virtual address (namely e) has meaning relative to a given address context--the address context specifies the physical address to which the virtual address maps. Why can the pointer e be dereferenced both before and after the addressing switch?_  
