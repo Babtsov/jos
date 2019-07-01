@@ -16,4 +16,5 @@ Build the package:
 based on the fpm guide https://fpm.readthedocs.io/en/latest/use-cases/make-install.html
 
 make install DESTDIR=/tmp/installdir
-fpm -s dir -t rpm -n qemu -v 999.999.999 -C /tmp/installdir -p mit_patched_qemu.rpm $(repoquery --requires --resolve qemu | cut -d ':' -f 1 | rev | cut -d '-' -f 2,3,4,5,6 | rev | awk '{ print "-d "$0}' | tr '\n' ' ')
+fpm -s dir -t rpm -n qemu -v 999.999.999 -C /tmp/installdir -p mit_patched_qemu.rpm -d glib2-devel -d libfdt-devel -d pixman-devel -d zlib-devel
+
