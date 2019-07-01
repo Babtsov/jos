@@ -16,5 +16,5 @@ Build the package:
 based on the fpm guide https://fpm.readthedocs.io/en/latest/use-cases/make-install.html
 
 make install DESTDIR=/tmp/installdir
-fpm -s dir -t rpm -n qemu -v 999.999.999 -C /tmp/installdir -p mit_patched_qemu.rpm -d glib2-devel -d libfdt-devel -d pixman-devel -d zlib-devel
+fpm -s dir -t rpm -n qemu -v 999.999.999 -C /tmp/installdir -p mit_patched_qemu.rpm -d glib2 -d libfdt -d pixman -d zlib -d libaio -d libcap -d libiscsi
 
