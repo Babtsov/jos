@@ -1,0 +1,19 @@
+Instructions of how to prepare the rpm:
+
+first clone MIT's qemu:
+git clone https://github.com/mit-pdos/6.828-qemu.git qemu
+
+then, we need to install dependencies before compiling qemu, so according to: https://wiki.qemu.org/Hosts/Linux
+sudo yum install git glib2-devel libfdt-devel pixman-devel zlib-devel
+sudo yum install libaio-devel libcap-devel libiscsi-devel
+
+and now compile qemu:
+
+./configure --disable-kvm --disable-werror --target-list="i386-softmmu x86_64-softmmu"
+make
+
+Build the package:
+based on the fpm guide https://fpm.readthedocs.io/en/latest/use-cases/make-install.html
+
+make install DESTDIR=/tmp/installdir
+fpm -s dir -t rpm -n qemu -v 999.999.999 -C /tmp/installdir -p mit_patched_qemu.rpm $(repoquery --requires --resolve qemu | cut -d ':' -f 1 | rev | cut -d '-' -f 2,3,4,5,6 | rev | awk '{ print "-d "$0}' | tr '\n' ' ')
