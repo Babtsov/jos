@@ -15,7 +15,7 @@ Vagrant.configure("2") do |config|
 
   config.vm.provision "shell", inline: <<-SHELL
 	yum install git gcc emacs https://centos7.iuscommunity.org/ius-release.rpm -y
-	git clone https://github.com/Babtsov/jos.git --branch host_vm
+	git clone https://github.com/Babtsov/jos.git
 	chown -R vagrant:vagrant jos
 	yum install jos/cookbooks/mit_patched_qemu.rpm -y
   SHELL
